@@ -110,7 +110,7 @@ kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operato
 
 With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource, target Ingress, generated maintenance Ingress, and backup ConfigMap must all live in that same namespace.
 
-For a one-command namespace-scoped install, Helm is the preferred packaging direction:
+For a one-command namespace-scoped install, Helm is the preferred future packaging direction. This repository does not publish a Helm chart yet, so use the `kubectl apply -k` command above for namespace-scoped installs today. The example below documents the intended chart interface:
 
 ```bash
 helm install app-maintenance-operator <chart> \
@@ -119,7 +119,7 @@ helm install app-maintenance-operator <chart> \
   --set scope=namespaced
 ```
 
-The default Helm install should stay global scoped so it matches the default manifest behavior:
+The planned default Helm install should stay global scoped so it matches the default manifest behavior:
 
 ```bash
 helm install app-maintenance-operator <chart> \
