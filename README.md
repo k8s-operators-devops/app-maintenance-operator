@@ -56,7 +56,7 @@ Choose the install mode that matches your operating model:
 Use the pinned release manifest when one operator should reconcile maintenance across namespaces:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.1.0/deploy/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.1.1/deploy/install.yaml
 ```
 
 Review the manifest first if you are installing from a local checkout:
@@ -72,7 +72,7 @@ The global scoped manifest includes the namespace, CRD, service account, manager
 Use the namespace-scoped profile when one operator instance should watch only its own namespace:
 
 ```bash
-kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.1.0
+kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.1.1
 ```
 
 This profile sets `WATCH_NAMESPACE` from the operator pod namespace and uses namespaced `Role` and `RoleBinding` resources for manager permissions. The `Maintenance` resource, target Ingress, generated maintenance Ingress, and backup ConfigMap must all live in that same namespace.
@@ -82,7 +82,7 @@ CRDs remain cluster-scoped Kubernetes resources, so installing the API still req
 The controller image is published to GHCR and pinned in the release manifest:
 
 ```text
-ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.1.0
+ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.1.1
 ```
 
 ### Helm Install UX
@@ -323,7 +323,7 @@ Release images are published by GitHub Actions to GHCR when a `v*` tag is pushed
 Before cutting a release tag, update pinned release references in one shot:
 
 ```bash
-make bump-release VERSION=v1.1.0
+make bump-release VERSION=v1.1.1
 ```
 
 Review `CHANGELOG.md`, merge the release-prep commit through the protected `main` branch, wait for required checks to pass on `main`, then create the immutable tag from that validated commit.
