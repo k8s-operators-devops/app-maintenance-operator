@@ -46,25 +46,38 @@ Confirm the annotations include `alb.ingress.kubernetes.io/group.name: <alb-ingr
 
 ## Installation
 
-Review the manifest before applying it:
+Choose the install mode that matches your operating model:
 
-```bash
-kubectl apply --dry-run=client --validate=false -f deploy/install.yaml
-```
+- **Global scoped**: one platform-owned operator watches `Maintenance` resources across application namespaces.
+- **Namespace scoped**: one operator instance watches only the namespace where it is installed.
 
-Install the operator:
+### Global Scoped Install
 
-```bash
-kubectl apply -f deploy/install.yaml
-```
-
-Install a pinned release:
+Use the pinned release manifest when one operator should reconcile maintenance across namespaces:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.1.0/deploy/install.yaml
 ```
 
-The install manifest includes the namespace, CRD, service account, RBAC, leader election RBAC, metrics service, and manager deployment. No webhook resources are included because this operator does not use webhooks.
+Review the manifest first if you are installing from a local checkout:
+
+```bash
+kubectl apply --dry-run=client --validate=false -f deploy/install.yaml
+```
+
+The global scoped manifest includes the namespace, CRD, service account, manager `ClusterRole` and `ClusterRoleBinding`, leader election RBAC, metrics service, and manager deployment. No webhook resources are included because this operator does not use webhooks.
+
+### Namespace Scoped Install
+
+Use the namespace-scoped profile when one operator instance should watch only its own namespace:
+
+```bash
+kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.1.0
+```
+
+This profile sets `WATCH_NAMESPACE` from the operator pod namespace and uses namespaced `Role` and `RoleBinding` resources for manager permissions. The `Maintenance` resource, target Ingress, generated maintenance Ingress, and backup ConfigMap must all live in that same namespace.
+
+CRDs remain cluster-scoped Kubernetes resources, so installing the API still requires cluster-level permission.
 
 The controller image is published to GHCR and pinned in the release manifest:
 
@@ -72,13 +85,60 @@ The controller image is published to GHCR and pinned in the release manifest:
 ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.1.0
 ```
 
-For least-privilege environments, the controller also supports namespace-scoped operation through `WATCH_NAMESPACE`. The `config/namespaced` Kustomize profile restricts the manager cache and manager RBAC to the operator namespace:
+### Helm Install UX
+
+Helm chart packaging is the preferred direction for a single-command install experience.
+
+Global scoped Helm install:
 
 ```bash
-kubectl apply -k config/namespaced
+helm install app-maintenance-operator <chart> \
+  --namespace alb-maintenance-operator \
+  --create-namespace
 ```
 
-CRDs remain cluster-scoped Kubernetes resources, so installing the API still requires cluster-level permission. See [Configuration](docs/configuration.md) for the security boundaries of namespace-scoped operation.
+Namespace scoped Helm install:
+
+```bash
+helm install app-maintenance-operator <chart> \
+  --namespace <application-namespace> \
+  --create-namespace \
+  --set scope=namespaced
+```
+
+Global scoped Helm install with a scheduled `Maintenance` resource:
+
+```bash
+helm install app-maintenance-operator <chart> \
+  --namespace alb-maintenance-operator \
+  --create-namespace \
+  --set maintenance.create=true \
+  --set maintenance.name=<maintenance-name> \
+  --set maintenance.namespace=<application-namespace> \
+  --set maintenance.targetIngress=<target-ingress-name> \
+  --set maintenance.maintenanceMode=true \
+  --set-string maintenance.schedule.start="<start-time-rfc3339>" \
+  --set-string maintenance.schedule.end="<end-time-rfc3339>"
+```
+
+Namespace scoped Helm install with a scheduled `Maintenance` resource:
+
+```bash
+helm install app-maintenance-operator <chart> \
+  --namespace <application-namespace> \
+  --create-namespace \
+  --set scope=namespaced \
+  --set maintenance.create=true \
+  --set maintenance.name=<maintenance-name> \
+  --set maintenance.targetIngress=<target-ingress-name> \
+  --set maintenance.maintenanceMode=true \
+  --set-string maintenance.schedule.start="<start-time-rfc3339>" \
+  --set-string maintenance.schedule.end="<end-time-rfc3339>"
+```
+
+Set `maintenance.targetIngress` to the existing ALB Ingress name in the maintenance namespace. Schedule values must be RFC3339 timestamps, using `YYYY-MM-DDTHH:MM:SSZ` for UTC or `YYYY-MM-DDTHH:MM:SS-04:00` with an explicit offset.
+
+Do not put watch scope in the `Maintenance` spec. Watch scope is deployment and RBAC configuration; maintenance intent belongs in the `Maintenance` resource. See [Configuration](docs/configuration.md) for the security boundaries of namespace-scoped operation.
 
 ## Verify
 
@@ -121,7 +181,7 @@ spec:
   maintenanceMode: true
   response:
     backend: fixed-response
-    html: "<html><body><h1>Scheduled Maintenance</h1></body></html>"
+    html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
 ```
 
 ## Check Status
@@ -200,7 +260,7 @@ spec:
     end: "2026-07-20T23:00:00Z"
   response:
     backend: fixed-response
-    html: "<html><body><h1>Scheduled Maintenance</h1></body></html>"
+    html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
 ```
 
 Apply the scheduled sample:

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://k8s-operators-devops.github.io/app-maintenance-operator/sitemap.xml

@@ -89,7 +89,7 @@ Confirm the annotations include `alb.ingress.kubernetes.io/group.name: <alb-ingr
 
 ## Namespace-Scoped Operation
 
-By default, the install manifest uses cluster-scoped manager RBAC so one controller can reconcile `Maintenance` resources across application namespaces. This is convenient for platform teams, but it increases blast radius if the controller service account is compromised.
+By default, the global scoped install manifest uses cluster-scoped manager RBAC so one controller can reconcile `Maintenance` resources across application namespaces. This is convenient for platform teams, but it increases blast radius if the controller service account is compromised.
 
 For stricter least-privilege environments, the manager supports `WATCH_NAMESPACE`. When this environment variable is set, the controller-runtime cache is restricted to that namespace list. Multiple namespaces can be provided as a comma-separated list.
 
@@ -102,16 +102,38 @@ WATCH_NAMESPACE=payments,checkout
 
 The `config/namespaced` Kustomize profile runs the controller in its own namespace and sets `WATCH_NAMESPACE` from the pod namespace. It uses namespaced `Role` and `RoleBinding` objects for manager permissions instead of the default manager `ClusterRole` and `ClusterRoleBinding`.
 
-```sh
-kubectl apply -k config/namespaced
+Pinned Kustomize install:
+
+```bash
+kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.1.0
+```
+
+With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource, target Ingress, generated maintenance Ingress, and backup ConfigMap must all live in that same namespace.
+
+For a one-command namespace-scoped install, Helm is the preferred packaging direction:
+
+```bash
+helm install app-maintenance-operator <chart> \
+  --namespace <application-namespace> \
+  --create-namespace \
+  --set scope=namespaced
+```
+
+The default Helm install should stay global scoped so it matches the default manifest behavior:
+
+```bash
+helm install app-maintenance-operator <chart> \
+  --namespace alb-maintenance-operator \
+  --create-namespace
 ```
 
 Important boundaries:
 
 - CRDs are cluster-scoped Kubernetes resources and still require cluster-level installation permissions.
-- The namespaced profile can reconcile only `Maintenance`, target Ingress, and generated backup ConfigMap resources in the watched namespace.
+- The namespaced profile can reconcile only `Maintenance`, target Ingress, and generated backup ConfigMap resources in the namespace where the operator is installed.
 - The target Ingress must still live in the same namespace as the `Maintenance` resource.
 - The namespaced profile disables the secured metrics endpoint by default to avoid adding cluster-level TokenReview and SubjectAccessReview permissions back into the runtime service account.
+- Do not put `watchNamespace` in the `Maintenance` spec. Watch scope is deployment and RBAC configuration, not application maintenance intent.
 
 ## GitOps Considerations
 
