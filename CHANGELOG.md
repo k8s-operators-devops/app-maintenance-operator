@@ -6,6 +6,24 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 ## [Unreleased]
 
+## [v1.1.1] - 2026-08-10
+
+### Changed
+
+- Clarified global scoped and namespace scoped installation guidance in the README.
+- Added Helm command examples for operator installation and scheduled Maintenance resource creation.
+- Updated pinned install, GitOps, issue-template, and generated manifest references for `v1.1.1`.
+- Replaced the basic fixed-response HTML samples with a polished ALB-safe maintenance page.
+
+### Security
+
+- Included prioritized Dependabot updates for OpenTelemetry, Kubernetes/controller-runtime dependencies, and GitHub Actions.
+
+### Fixed
+
+- Added GitHub Pages crawling metadata with `docs/robots.txt`, `docs/sitemap.xml`, canonical URL metadata, and social preview metadata.
+- Clarified that operator watch scope belongs in deployment configuration, not in the `Maintenance` custom resource spec.
+
 ## [v1.1.0] - 2026-07-22
 
 ### Added
