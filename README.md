@@ -85,11 +85,11 @@ The controller image is published to GHCR and pinned in the release manifest:
 ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.1.1
 ```
 
-### Helm Install UX
+### Planned Helm Install UX
 
-Helm chart packaging is the preferred direction for a single-command install experience.
+Helm chart packaging is planned, but this repository does not publish a Helm chart yet. The examples below document the intended chart interface so the future chart stays aligned with the current manifest behavior. Use the pinned `kubectl apply` and `kubectl apply -k` commands above for installs today.
 
-Global scoped Helm install:
+Planned global scoped Helm install:
 
 ```bash
 helm install app-maintenance-operator <chart> \
@@ -97,7 +97,7 @@ helm install app-maintenance-operator <chart> \
   --create-namespace
 ```
 
-Namespace scoped Helm install:
+Planned namespace scoped Helm install:
 
 ```bash
 helm install app-maintenance-operator <chart> \
@@ -106,7 +106,7 @@ helm install app-maintenance-operator <chart> \
   --set scope=namespaced
 ```
 
-Global scoped Helm install with a scheduled `Maintenance` resource:
+Planned global scoped Helm install with a scheduled `Maintenance` resource:
 
 ```bash
 helm install app-maintenance-operator <chart> \
@@ -121,7 +121,7 @@ helm install app-maintenance-operator <chart> \
   --set-string maintenance.schedule.end="<end-time-rfc3339>"
 ```
 
-Namespace scoped Helm install with a scheduled `Maintenance` resource:
+Planned namespace scoped Helm install with a scheduled `Maintenance` resource:
 
 ```bash
 helm install app-maintenance-operator <chart> \
