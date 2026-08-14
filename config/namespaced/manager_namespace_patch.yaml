@@ -13,7 +13,7 @@ spec:
         - --health-probe-bind-address=:8081
         env:
         - name: OPERATOR_VERSION
-          value: v1.1.1
+          value: v1.2.0
         - name: WATCH_NAMESPACE
           valueFrom:
             fieldRef:
