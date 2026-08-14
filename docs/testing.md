@@ -43,7 +43,7 @@ kubectl logs -n alb-maintenance-operator \
 
 ## Enable Maintenance
 
-Update `samples/maintenance-enable.yaml` so `<maintenance-name>`, `<application-namespace>`, and `<target-ingress-name>` match a non-production ALB Ingress.
+Update `samples/maintenance-enable.yaml` so `<maintenance-name>`, `<application-namespace>`, and `<alb-ingress-group-name>` match a non-production ALB IngressGroup.
 
 ```sh
 kubectl apply -f samples/maintenance-enable.yaml
@@ -57,13 +57,14 @@ Confirm the generated maintenance Ingress:
 
 - exists separately from the application Ingress;
 - has `alb.ingress.kubernetes.io/group.order: "-1000"`;
-- has the same ALB group name as the target Ingress;
+- has `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`;
 - uses `maintenance/use-annotation` for every backend.
 
-Confirm the target Ingress declares the ALB IngressGroup:
+Confirm at least one application Ingress declares the ALB IngressGroup:
 
 ```sh
-kubectl describe ingress <target-ingress-name> -n <application-namespace>
+kubectl get ingress -n <application-namespace> \
+  -o custom-columns=NAME:.metadata.name,GROUP:.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name,LISTEN_PORTS:.metadata.annotations.alb\.ingress\.kubernetes\.io/listen-ports
 ```
 
 Look for `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>` in the annotations.
@@ -102,7 +103,7 @@ The generated maintenance Ingress and backup ConfigMap should be gone. The appli
 
 ## Schedule Maintenance
 
-Update `samples/maintenance-scheduled.yaml` so `<maintenance-name>`, `<application-namespace>`, `<target-ingress-name>`, `spec.maintenanceMode`, `spec.schedule.start`, and `spec.schedule.end` match a non-production ALB Ingress and maintenance window. Use `Z` for UTC or an explicit RFC3339 offset such as `-04:00` or `+05:30` for the timezone your change window uses.
+Update `samples/maintenance-scheduled.yaml` so `<maintenance-name>`, `<application-namespace>`, `<alb-ingress-group-name>`, `spec.maintenanceMode`, `spec.schedule.start`, and `spec.schedule.end` match a non-production ALB IngressGroup and maintenance window. Use `Z` for UTC or an explicit RFC3339 offset such as `-04:00` or `+05:30` for the timezone your change window uses.
 
 ```sh
 kubectl apply -f samples/maintenance-scheduled.yaml
@@ -137,4 +138,4 @@ kubectl logs -n alb-maintenance-operator \
   -c manager
 ```
 
-Look for invalid configuration errors such as missing target Ingress, missing ALB group name, non-ALB target Ingress, or fixed-response HTML exceeding 1024 bytes.
+Look for invalid configuration errors such as missing targeting mode, both targeting modes being set, missing target Ingress in legacy mode, missing ALB group name in legacy mode, non-ALB target Ingress, or fixed-response HTML exceeding 1024 bytes.

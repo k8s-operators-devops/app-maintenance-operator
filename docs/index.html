@@ -343,11 +343,11 @@
         </div>
         <div class="item">
           <h3>AWS Load Balancer Controller</h3>
-          <p>The target application Ingress must be ALB-managed.</p>
+          <p>The application Ingresses in the group must be ALB-managed.</p>
         </div>
         <div class="item">
           <h3>Existing IngressGroup</h3>
-          <p>The target Ingress must already define <code>alb.ingress.kubernetes.io/group.name</code>.</p>
+          <p>At least one application Ingress must already define <code>alb.ingress.kubernetes.io/group.name</code>.</p>
         </div>
       </div>
       <p class="note">

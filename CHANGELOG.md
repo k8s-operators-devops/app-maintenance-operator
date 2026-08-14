@@ -6,6 +6,14 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added preferred ALB IngressGroup-based maintenance targeting with `spec.albGroupName`.
+
+### Changed
+
+- Updated samples and documentation to use group-based maintenance as the default path while keeping `spec.targetIngress` as legacy compatibility.
+
 ## [v1.1.1] - 2026-08-10
 
 ### Changed
