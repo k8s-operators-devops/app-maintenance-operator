@@ -36,10 +36,9 @@ spec:
         app.kubernetes.io/component: controller
         app.kubernetes.io/version: v1.2.0
     spec:
-      # TODO(user): Uncomment the following code to configure the nodeAffinity expression
-      # according to the platforms which are supported by your solution.
-      # It is considered best practice to support multiple architectures. You can
-      # build your manager image using the makefile target docker-buildx.
+      # Optional node affinity can restrict scheduling to architectures published
+      # by the release image. The published image supports linux/amd64 and
+      # linux/arm64.
       # affinity:
       #   nodeAffinity:
       #     requiredDuringSchedulingIgnoredDuringExecution:
@@ -69,6 +68,7 @@ spec:
         args:
           - --leader-elect
           - --health-probe-bind-address=:8081
+        # Overridden by release overlays in config/default and config/namespaced.
         image: controller:latest
         name: manager
         env:
@@ -96,8 +96,8 @@ spec:
             port: 8081
           initialDelaySeconds: 5
           periodSeconds: 10
-        # TODO(user): Configure the resources accordingly based on the project requirements.
-        # More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+        # Conservative defaults for a lightweight controller. Tune for larger
+        # clusters after observing reconcile latency and memory usage.
         resources:
           limits:
             cpu: 500m

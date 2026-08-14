@@ -31,9 +31,9 @@ When a `Maintenance` resource is created or updated, the controller:
 4. When targeting by Ingress name, reads the target Ingress, validates it, creates a one-time backup ConfigMap, and mirrors its rules into the generated maintenance Ingress.
 5. Updates status phase, message, and the standard `Ready` condition.
 
-On disable, the controller deletes the generated maintenance Ingress and any backup ConfigMap. It does not patch, replace, or restore the original application Ingress.
+On disable, the controller deletes the generated maintenance Ingress and any backup ConfigMap from Ingress-name targeting. It does not patch, replace, or restore the original application Ingress.
 
-On deletion, the controller deletes the generated maintenance Ingress first, waits until it is gone, deletes the backup ConfigMap, and then removes the finalizer.
+On deletion, the controller deletes the generated maintenance Ingress first, waits until it is gone, deletes any owned backup ConfigMap, and then removes the finalizer.
 
 ## Overlay Ingress Model
 
@@ -79,7 +79,7 @@ flowchart LR
 The controller watches:
 
 - `Maintenance` resources;
-- owned backup ConfigMaps;
+- owned backup ConfigMaps created for Ingress-name targeting;
 - owned generated maintenance Ingresses;
 - target Ingress changes filtered by the `spec.targetIngress` field index.
 

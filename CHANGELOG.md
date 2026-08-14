@@ -12,11 +12,11 @@ No unreleased changes.
 
 ### Added
 
-- Added preferred ALB IngressGroup-based maintenance targeting with `spec.albGroupName`.
+- Added ALB IngressGroup-based maintenance targeting with `spec.albGroupName`.
 
 ### Changed
 
-- Updated samples and documentation to use group-based maintenance as the default path while keeping `spec.targetIngress` as legacy compatibility.
+- Updated samples and documentation to use group-based maintenance as the default AWS ALB path while keeping `spec.targetIngress` as a supported direct Ingress-name targeting option.
 - Updated pinned install, namespaced install, generated manifest, Kustomize, issue-template, docs-site, and image-publish references for `v1.2.0`.
 
 ### Security
