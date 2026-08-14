@@ -101,7 +101,7 @@ kubectl get configmap -n <application-namespace>
 kubectl describe maintenance <maintenance-name> -n <application-namespace>
 ```
 
-The generated maintenance Ingress and backup ConfigMap should be gone. The application Ingress should remain unchanged.
+For ALB IngressGroup targeting, the generated maintenance Ingress should be gone and no backup ConfigMap should be created. For Ingress-name targeting, any generated backup ConfigMap should also be gone. The application Ingress should remain unchanged.
 
 ## Schedule Maintenance
 
@@ -132,7 +132,7 @@ kubectl get ingress -n <application-namespace>
 kubectl get configmap -n <application-namespace>
 ```
 
-The controller is expected to delete the generated maintenance Ingress first, wait until it is gone, delete the backup ConfigMap, and then remove the finalizer.
+The controller is expected to delete the generated maintenance Ingress first, wait until it is gone, delete any owned backup ConfigMap, and then remove the finalizer.
 
 ## Controller Logs
 

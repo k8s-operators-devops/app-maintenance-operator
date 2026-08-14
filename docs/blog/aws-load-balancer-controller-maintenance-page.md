@@ -25,11 +25,10 @@ flowchart LR
 
 The important design choice is restraint: the operator does not mutate the original application Ingress during normal enable or disable. That reduces rollback risk and makes the operational story easier to trust.
 
-This is not a silver bullet. The first release is intentionally narrow:
+This is not a silver bullet. The current release is intentionally narrow:
 
 - AWS ALB fixed-response only;
 - 1024-byte fixed-response body limit;
-- target Ingress and `Maintenance` resource must be in the same namespace.
+- the `Maintenance` resource must live in the same namespace as the ALB IngressGroup members it targets.
 
 Those constraints are real, but they are explicit. The operator is built to remove one sharp edge first: safely putting an ALB-backed app into maintenance mode without editing the app team's Ingress.
-

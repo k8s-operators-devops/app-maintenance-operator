@@ -1,4 +1,7 @@
 ## Append samples of your project ##
+# Keep this Kustomize bundle to one placeholder sample so it remains renderable.
+# The full enable, disable, scheduled, and Ingress-name examples live in
+# top-level samples/ for direct copy/edit/apply workflows.
 resources:
 - maintenance-enable.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

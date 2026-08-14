@@ -14,7 +14,7 @@ body:
     id: steps
     attributes:
       label: Reproduction steps
-      description: Include the Maintenance resource, target Ingress shape, and commands used.
+      description: Include the Maintenance resource, ALB IngressGroup or target Ingress details, and commands used.
       value: |
         1.
         2.

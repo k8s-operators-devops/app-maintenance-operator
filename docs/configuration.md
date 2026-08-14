@@ -155,27 +155,12 @@ kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operato
 
 With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource and generated maintenance Ingress must live in that same namespace. With Ingress-name targeting, the target Ingress and backup ConfigMap must also live there.
 
-For a one-command namespace-scoped install, Helm is the preferred future packaging direction. This repository does not publish a Helm chart yet, so use the `kubectl apply -k` command above for namespace-scoped installs today. The example below documents the intended chart interface:
-
-```bash
-helm install app-maintenance-operator <chart> \
-  --namespace <application-namespace> \
-  --create-namespace \
-  --set scope=namespaced
-```
-
-The planned default Helm install should stay global scoped so it matches the default manifest behavior:
-
-```bash
-helm install app-maintenance-operator <chart> \
-  --namespace alb-maintenance-operator \
-  --create-namespace
-```
+Helm chart packaging is planned but not published in this repository yet. Use the pinned Kustomize command above for namespace-scoped installs today; the README tracks the planned Helm command shape.
 
 Important boundaries:
 
 - CRDs are cluster-scoped Kubernetes resources and still require cluster-level installation permissions.
-- The namespaced profile can reconcile only `Maintenance`, generated maintenance Ingress, and generated backup ConfigMap resources in the namespace where the operator is installed.
+- The namespaced profile can reconcile only `Maintenance`, generated maintenance Ingress, and, for Ingress-name targeting, generated backup ConfigMap resources in the namespace where the operator is installed.
 - With Ingress-name targeting, the target Ingress must still live in the same namespace as the `Maintenance` resource.
 - The namespaced profile disables the secured metrics endpoint by default to avoid adding cluster-level TokenReview and SubjectAccessReview permissions back into the runtime service account.
 - Do not put `watchNamespace` in the `Maintenance` spec. Watch scope is deployment and RBAC configuration, not application maintenance intent.
@@ -184,7 +169,7 @@ Important boundaries:
 
 The operator creates temporary maintenance resources dynamically. In GitOps-managed namespaces, tools such as Argo CD or Flux may report these resources as drift. If automated pruning is enabled, the GitOps controller may delete the generated maintenance overlay before the scheduled window is complete.
 
-Production GitOps users should explicitly ignore or exclude operator-generated resources from prune decisions. At minimum, review ignore rules for generated maintenance Ingresses, backup ConfigMaps owned by a `Maintenance` resource, and resources managed by the operator service account.
+Production GitOps users should explicitly ignore or exclude operator-generated resources from prune decisions. At minimum, review ignore rules for generated maintenance Ingresses, backup ConfigMaps owned by a `Maintenance` resource when using Ingress-name targeting, and resources managed by the operator service account.
 
 ## Examples
 
@@ -260,7 +245,7 @@ Uses standard `metav1.Condition` shape. The controller sets the `Ready` conditio
 
 `status.backupCreated`
 
-Indicates whether the operator has created or accepted an owned backup ConfigMap.
+Indicates whether the operator has created or accepted an owned backup ConfigMap. This is used only with Ingress-name targeting.
 
 `status.backupResourceName`
 
