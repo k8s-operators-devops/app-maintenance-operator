@@ -165,7 +165,7 @@ kubectl logs -n alb-maintenance-operator \
 Choose one supported targeting option:
 
 - ALB IngressGroup name with `spec.albGroupName`, recommended for AWS Load Balancer Controller groups.
-- Ingress name with `spec.targetIngress`, supported when you want to target one existing ALB Ingress directly.
+- Ingress name with `spec.targetIngress`, supported when you want to reuse one existing ALB Ingress for group/listener context while still creating one high-priority catch-all maintenance rule.
 
 For ALB IngressGroup targeting, edit `samples/maintenance-enable.yaml` before applying it:
 
@@ -367,7 +367,6 @@ kubectl logs -n alb-maintenance-operator deploy/alb-maintenance
 - `TargetIngressNotFound`: with Ingress-name targeting, confirm the `Maintenance` resource is in the same namespace as the target Ingress.
 - `InvalidConfiguration` for missing group name: with Ingress-name targeting, add `alb.ingress.kubernetes.io/group.name` to the target Ingress.
 - Non-ALB target error: with Ingress-name targeting, set `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`.
-- No HTTP paths/default backend error: with Ingress-name targeting, ensure the target Ingress has at least one HTTP path or a default backend.
 - Body limit error: ALB fixed-response message bodies are limited to 1024 bytes.
 - Generated Ingress does not take precedence: confirm both Ingresses are in the same ALB IngressGroup and the generated Ingress has `group.order: "-1000"`.
 

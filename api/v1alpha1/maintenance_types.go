@@ -26,9 +26,9 @@ type MaintenanceSpec struct {
 
 	// Name of the target Ingress.
 	//
-	// This supported targeting mode creates a maintenance Ingress by mirroring
-	// the target Ingress rules and replacing all HTTP backends with the
-	// maintenance response.
+	// This supported targeting mode reads the target Ingress for ALB metadata,
+	// then creates one standalone catch-all maintenance Ingress in the same
+	// ALB IngressGroup.
 	// +optional
 	TargetIngress string `json:"targetIngress,omitempty"`
 

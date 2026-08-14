@@ -62,7 +62,7 @@ Confirm the generated maintenance Ingress:
 - exists separately from the application Ingress;
 - has `alb.ingress.kubernetes.io/group.order: "-1000"`;
 - has `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`;
-- uses `maintenance/use-annotation` for every backend.
+- has one catch-all `/*` path that uses `maintenance/use-annotation`.
 
 Confirm at least one application Ingress declares the ALB IngressGroup:
 

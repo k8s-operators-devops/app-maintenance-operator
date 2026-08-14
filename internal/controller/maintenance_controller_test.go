@@ -170,6 +170,17 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 	ctx := context.Background()
 	scheme := testScheme(t)
 	target := newTargetIngress(testTargetIngress, testNamespace)
+	pathType := networkingv1.PathTypePrefix
+	target.Spec.Rules = append(target.Spec.Rules, networkingv1.IngressRule{
+		Host: "redirect.example.com",
+		IngressRuleValue: networkingv1.IngressRuleValue{HTTP: &networkingv1.HTTPIngressRuleValue{
+			Paths: []networkingv1.HTTPIngressPath{{
+				Path:     "/case-auth",
+				PathType: &pathType,
+				Backend:  networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{Name: "domain-redirect", Port: networkingv1.ServiceBackendPort{Name: "use-annotation"}}},
+			}},
+		}},
+	})
 	targetOriginal := target.DeepCopy()
 	maintenance := newMaintenance("maint", target.Name)
 	maintenance.UID = types.UID(testMaintenanceUID)
@@ -191,6 +202,7 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 	if generated.Labels[managedByLabelKey] != managedByLabelValue {
 		t.Fatalf("expected managed-by label")
 	}
+	assertSingleCatchAllMaintenanceRule(t, generated)
 	assertAllHTTPBackends(t, generated)
 	if !equalityIngress(target, targetOriginal) {
 		t.Fatalf("target ingress was mutated")
@@ -212,6 +224,7 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 	if updated.Labels["system-added"] != "preserve-me" {
 		t.Fatalf("expected unrelated labels to be preserved")
 	}
+	assertSingleCatchAllMaintenanceRule(t, updated)
 	assertAllHTTPBackends(t, updated)
 }
 
@@ -248,6 +261,7 @@ func TestEnsureGroupMaintenanceIngress(t *testing.T) {
 	if path.Path != "/*" || path.PathType == nil || *path.PathType != networkingv1.PathTypeImplementationSpecific {
 		t.Fatalf("expected /* ImplementationSpecific path, got %#v", path)
 	}
+	assertSingleCatchAllMaintenanceRule(t, generated)
 	assertAllHTTPBackends(t, generated)
 
 	generated.Annotations[albActionAnnotation] = testDriftedValue
@@ -329,7 +343,6 @@ func TestEnsureMaintenanceIngressRejectsInvalidTargets(t *testing.T) {
 			i.Spec.IngressClassName = nil
 			delete(i.Annotations, "kubernetes.io/ingress.class")
 		}},
-		{name: "no paths or default backend", mutate: func(i *networkingv1.Ingress) { i.Spec.Rules = nil; i.Spec.DefaultBackend = nil }},
 	}
 
 	for _, tt := range tests {
@@ -862,6 +875,23 @@ func assertAllHTTPBackends(t testFatalHelper, ingress *networkingv1.Ingress) {
 				t.Fatalf("unexpected backend: %#v", path.Backend)
 			}
 		}
+	}
+}
+
+func assertSingleCatchAllMaintenanceRule(t testFatalHelper, ingress *networkingv1.Ingress) {
+	t.Helper()
+	if ingress.Spec.DefaultBackend != nil {
+		t.Fatalf("expected no default backend, got %#v", ingress.Spec.DefaultBackend)
+	}
+	if len(ingress.Spec.Rules) != 1 || ingress.Spec.Rules[0].HTTP == nil || len(ingress.Spec.Rules[0].HTTP.Paths) != 1 {
+		t.Fatalf("expected one catch-all HTTP maintenance rule, got %#v", ingress.Spec.Rules)
+	}
+	path := ingress.Spec.Rules[0].HTTP.Paths[0]
+	if path.Path != "/*" || path.PathType == nil || *path.PathType != networkingv1.PathTypeImplementationSpecific {
+		t.Fatalf("expected /* ImplementationSpecific path, got %#v", path)
+	}
+	if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != "use-annotation" {
+		t.Fatalf("unexpected maintenance backend: %#v", path.Backend)
 	}
 }
 

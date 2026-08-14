@@ -32,7 +32,7 @@ When a `Maintenance` resource is created or updated, the controller:
 1. Adds a finalizer to the `Maintenance` resource.
 2. Builds the fixed-response ALB action from `spec.response`.
 3. In group mode, discovers existing same-namespace IngressGroup members, resolves their listener ports, and creates or reconciles a standalone catch-all maintenance Ingress for `spec.albGroupName`.
-4. When targeting by Ingress name, reads the target Ingress, validates it, creates a one-time backup ConfigMap, and mirrors its rules into the generated maintenance Ingress.
+4. When targeting by Ingress name, reads the target Ingress for ALB metadata, validates it, creates a one-time backup ConfigMap, and creates a standalone catch-all maintenance Ingress.
 5. Updates status phase, message, and the standard `Ready` condition.
 
 On disable, the controller deletes the generated maintenance Ingress and any backup ConfigMap from Ingress-name targeting. It does not patch, replace, or restore the original application Ingress.
@@ -54,6 +54,7 @@ The generated maintenance Ingress:
 - uses `spec.albGroupName` directly, or copies the target Ingress group name when `spec.targetIngress` is used;
 - sets `alb.ingress.kubernetes.io/group.order: "-1000"`;
 - sets `alb.ingress.kubernetes.io/listen-ports` from the discovered ALB group listener ports;
+- creates a single catch-all `/*` fixed-response rule;
 - removes inherited ALB action annotations;
 - removes target-group-specific health check/backend annotations;
 - adds only `alb.ingress.kubernetes.io/actions.maintenance`.

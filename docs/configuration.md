@@ -10,7 +10,7 @@ Start with the [project README](../README.md) for installation and usage, or ope
 
 Optional Ingress-name targeting mode. Name of the target Ingress in the same namespace as the `Maintenance` resource.
 
-The operator uses this field to find the target Ingress, mirror its rules, and replace every HTTP backend with the maintenance fixed response. Metadata labels on the `Maintenance` resource do not select the target Ingress.
+The operator uses this field to find the target Ingress and reuse its ALB metadata, including its IngressGroup. It then creates one standalone high-priority `/*` fixed-response maintenance rule instead of mirroring every application route or redirect rule. Metadata labels on the `Maintenance` resource do not select the target Ingress.
 
 `spec.albGroupName`
 
@@ -113,10 +113,9 @@ When `spec.targetIngress` is used, the target Ingress must:
 
 - exist in the same namespace as the `Maintenance` resource;
 - be ALB-managed through `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`;
-- define the ALB IngressGroup ID/name with `alb.ingress.kubernetes.io/group.name`;
-- contain at least one HTTP path or a valid default backend.
+- define the ALB IngressGroup ID/name with `alb.ingress.kubernetes.io/group.name`.
 
-The operator copies ALB-level annotations that are relevant to the load balancer and removes annotations that conflict with fixed-response behavior.
+The operator copies ALB-level annotations that are relevant to the load balancer and removes annotations that conflict with fixed-response behavior. It does not copy application paths, redirect rules, or default backends from the target Ingress into the generated maintenance Ingress.
 
 The group name is mandatory because the operator creates a separate maintenance Ingress that joins the same ALB IngressGroup as the existing application Ingress. If the target Ingress is not grouped, the controller reports `InvalidConfiguration` and does not create the maintenance overlay.
 

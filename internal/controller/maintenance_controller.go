@@ -370,16 +370,13 @@ func (r *MaintenanceReconciler) ensureMaintenanceIngress(
 		return nil, permanentConfigError{err}
 	}
 
-	desired := targetIngress.DeepCopy()
-	desired.Name = maintenanceIngressName(maintenance)
-	desired.Namespace = maintenance.Namespace
-	desired.ResourceVersion = ""
-	desired.UID = ""
-	desired.CreationTimestamp = metav1.Time{}
-	desired.ManagedFields = nil
-	desired.Finalizers = nil
-	desired.Status = networkingv1.IngressStatus{}
-	desired.OwnerReferences = nil
+	desired := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      maintenanceIngressName(maintenance),
+			Namespace: maintenance.Namespace,
+		},
+		Spec: singleRuleMaintenanceSpec(targetIngress.Spec.IngressClassName),
+	}
 	if err := ctrl.SetControllerReference(maintenance, desired, r.Scheme); err != nil {
 		return nil, err
 	}
@@ -390,7 +387,6 @@ func (r *MaintenanceReconciler) ensureMaintenanceIngress(
 		desired.Labels = map[string]string{}
 	}
 	desired.Labels[managedByLabelKey] = managedByLabelValue
-	configureMaintenanceSpec(&desired.Spec)
 
 	var existing networkingv1.Ingress
 	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
@@ -447,7 +443,6 @@ func (r *MaintenanceReconciler) ensureGroupMaintenanceIngress(
 	listenPorts string,
 	actionJSON string,
 ) (*networkingv1.Ingress, error) {
-	pathType := networkingv1.PathTypeImplementationSpecific
 	className := albIngressClass
 	desired := &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -462,20 +457,7 @@ func (r *MaintenanceReconciler) ensureGroupMaintenanceIngress(
 				albActionAnnotation:     actionJSON,
 			},
 		},
-		Spec: networkingv1.IngressSpec{
-			IngressClassName: &className,
-			Rules: []networkingv1.IngressRule{{
-				IngressRuleValue: networkingv1.IngressRuleValue{
-					HTTP: &networkingv1.HTTPIngressRuleValue{
-						Paths: []networkingv1.HTTPIngressPath{{
-							Path:     "/*",
-							PathType: &pathType,
-							Backend:  *maintenanceBackend(),
-						}},
-					},
-				},
-			}},
-		},
+		Spec: singleRuleMaintenanceSpec(&className),
 	}
 	if strings.TrimSpace(listenPorts) != "" {
 		desired.Annotations["alb.ingress.kubernetes.io/listen-ports"] = listenPorts
@@ -629,19 +611,6 @@ func validateTargetIngress(ingress *networkingv1.Ingress) error {
 	if strings.TrimSpace(ingress.Annotations[albGroupNameAnnotation]) == "" {
 		return fmt.Errorf("target ingress %s/%s does not define %s", ingress.Namespace, ingress.Name, albGroupNameAnnotation)
 	}
-	hasHTTPPath := false
-	for _, rule := range ingress.Spec.Rules {
-		if rule.HTTP == nil {
-			continue
-		}
-		if len(rule.HTTP.Paths) > 0 {
-			hasHTTPPath = true
-			break
-		}
-	}
-	if !hasHTTPPath && ingress.Spec.DefaultBackend == nil {
-		return fmt.Errorf("target ingress %s/%s has no HTTP paths or default backend", ingress.Namespace, ingress.Name)
-	}
 	return nil
 }
 
@@ -699,18 +668,21 @@ func reconcileAnnotations(existing, desired map[string]string) map[string]string
 	return next
 }
 
-func configureMaintenanceSpec(spec *networkingv1.IngressSpec) {
-	if spec.DefaultBackend != nil {
-		spec.DefaultBackend = maintenanceBackend()
-	}
-	for i := range spec.Rules {
-		rule := &spec.Rules[i]
-		if rule.HTTP == nil {
-			continue
-		}
-		for j := range rule.HTTP.Paths {
-			rule.HTTP.Paths[j].Backend = *maintenanceBackend()
-		}
+func singleRuleMaintenanceSpec(className *string) networkingv1.IngressSpec {
+	pathType := networkingv1.PathTypeImplementationSpecific
+	return networkingv1.IngressSpec{
+		IngressClassName: className,
+		Rules: []networkingv1.IngressRule{{
+			IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{{
+						Path:     "/*",
+						PathType: &pathType,
+						Backend:  *maintenanceBackend(),
+					}},
+				},
+			},
+		}},
 	}
 }
 
