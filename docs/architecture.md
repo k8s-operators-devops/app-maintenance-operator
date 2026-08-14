@@ -17,7 +17,7 @@ The operator gives the ALB a higher-priority maintenance rule without rewriting 
 
 ## Maintenance Custom Resource
 
-The `Maintenance` custom resource is the operator API for enabling or disabling maintenance mode for an ALB IngressGroup. The preferred targeting field is `spec.albGroupName`; legacy target-Ingress mirroring remains available through `spec.targetIngress`.
+The `Maintenance` custom resource is the operator API for enabling or disabling maintenance mode for an ALB IngressGroup. The recommended targeting field for AWS Load Balancer Controller users is `spec.albGroupName`; direct Ingress-name targeting is also supported through `spec.targetIngress`.
 
 The ALB IngressGroup must already exist through one or more AWS Load Balancer Controller-managed Ingresses.
 
@@ -28,7 +28,7 @@ When a `Maintenance` resource is created or updated, the controller:
 1. Adds a finalizer to the `Maintenance` resource.
 2. Builds the fixed-response ALB action from `spec.response`.
 3. In group mode, discovers existing same-namespace IngressGroup members, resolves their listener ports, and creates or reconciles a standalone catch-all maintenance Ingress for `spec.albGroupName`.
-4. In legacy target-Ingress mode, reads the target Ingress, validates it, creates a one-time backup ConfigMap, and mirrors its rules into the generated maintenance Ingress.
+4. When targeting by Ingress name, reads the target Ingress, validates it, creates a one-time backup ConfigMap, and mirrors its rules into the generated maintenance Ingress.
 5. Updates status phase, message, and the standard `Ready` condition.
 
 On disable, the controller deletes the generated maintenance Ingress and any backup ConfigMap. It does not patch, replace, or restore the original application Ingress.
@@ -47,7 +47,7 @@ AWS Load Balancer Controller merges Ingresses with the same `alb.ingress.kuberne
 
 The generated maintenance Ingress:
 
-- uses `spec.albGroupName` directly, or copies the target Ingress group name in legacy mode;
+- uses `spec.albGroupName` directly, or copies the target Ingress group name when `spec.targetIngress` is used;
 - sets `alb.ingress.kubernetes.io/group.order: "-1000"`;
 - sets `alb.ingress.kubernetes.io/listen-ports` from the discovered ALB group listener ports;
 - removes inherited ALB action annotations;
@@ -83,4 +83,4 @@ The controller watches:
 - owned generated maintenance Ingresses;
 - target Ingress changes filtered by the `spec.targetIngress` field index.
 
-Owned Ingress watches repair drift or manual deletion of the generated maintenance Ingress. Target Ingress watches allow legacy maintenance overlays to be reconciled when the source application Ingress changes.
+Owned Ingress watches repair drift or manual deletion of the generated maintenance Ingress. Target Ingress watches allow Ingress-name maintenance overlays to be reconciled when the source application Ingress changes.

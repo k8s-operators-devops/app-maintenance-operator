@@ -162,7 +162,12 @@ kubectl logs -n alb-maintenance-operator \
 
 ## Enable Maintenance
 
-Edit `samples/maintenance-enable.yaml` before applying it:
+Choose one supported targeting option:
+
+- ALB IngressGroup name with `spec.albGroupName`, recommended for AWS Load Balancer Controller groups.
+- Ingress name with `spec.targetIngress`, supported when you want to target one existing ALB Ingress directly.
+
+For ALB IngressGroup targeting, edit `samples/maintenance-enable.yaml` before applying it:
 
 - replace `<maintenance-name>` with the name for the `Maintenance` resource;
 - replace `<application-namespace>` with the namespace where the ALB IngressGroup member Ingresses live;
@@ -182,6 +187,22 @@ metadata:
   namespace: <application-namespace>
 spec:
   albGroupName: <alb-ingress-group-name>
+  maintenanceMode: true
+  response:
+    backend: fixed-response
+    html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
+```
+
+For Ingress-name targeting, use `samples/maintenance-enable-ingress.yaml`:
+
+```yaml
+apiVersion: k8smaintenance.io/v1alpha1
+kind: Maintenance
+metadata:
+  name: <maintenance-name>
+  namespace: <application-namespace>
+spec:
+  targetIngress: <target-ingress-name>
   maintenanceMode: true
   response:
     backend: fixed-response
@@ -233,8 +254,16 @@ content-type: text/html
 
 ## Disable Maintenance
 
+For ALB IngressGroup targeting:
+
 ```bash
 kubectl apply -f samples/maintenance-disable.yaml
+```
+
+For Ingress-name targeting:
+
+```bash
+kubectl apply -f samples/maintenance-disable-ingress.yaml
 ```
 
 Or patch the existing resource:
@@ -275,6 +304,12 @@ Apply the scheduled sample:
 kubectl apply -f samples/maintenance-scheduled.yaml
 ```
 
+For Ingress-name targeting:
+
+```bash
+kubectl apply -f samples/maintenance-scheduled-ingress.yaml
+```
+
 Behavior:
 
 - before `start`, the resource stays `Pending` and the generated maintenance Ingress is absent;
@@ -300,12 +335,12 @@ kubectl delete -f deploy/install.yaml
 ## Troubleshooting
 
 - `targetIngress or albGroupName is required`: set exactly one targeting mode.
-- `set either targetIngress or albGroupName, not both`: choose group-based or legacy target-Ingress mode.
+- `set either targetIngress or albGroupName, not both`: choose ALB IngressGroup targeting or Ingress-name targeting.
 - `no existing Ingresses found for ALB group`: confirm at least one application Ingress in the same namespace has `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`.
-- `TargetIngressNotFound`: in legacy `targetIngress` mode, confirm the `Maintenance` resource is in the same namespace as the target Ingress.
-- `InvalidConfiguration` for missing group name: in legacy `targetIngress` mode, add `alb.ingress.kubernetes.io/group.name` to the target Ingress.
-- Non-ALB target error: in legacy `targetIngress` mode, set `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`.
-- No HTTP paths/default backend error: in legacy `targetIngress` mode, ensure the target Ingress has at least one HTTP path or a default backend.
+- `TargetIngressNotFound`: with Ingress-name targeting, confirm the `Maintenance` resource is in the same namespace as the target Ingress.
+- `InvalidConfiguration` for missing group name: with Ingress-name targeting, add `alb.ingress.kubernetes.io/group.name` to the target Ingress.
+- Non-ALB target error: with Ingress-name targeting, set `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`.
+- No HTTP paths/default backend error: with Ingress-name targeting, ensure the target Ingress has at least one HTTP path or a default backend.
 - Body limit error: ALB fixed-response message bodies are limited to 1024 bytes.
 - Generated Ingress does not take precedence: confirm both Ingresses are in the same ALB IngressGroup and the generated Ingress has `group.order: "-1000"`.
 
@@ -314,7 +349,7 @@ kubectl delete -f deploy/install.yaml
 - Only AWS ALB fixed-response mode is currently supported.
 - `nginx` and existing `service` response backends are not implemented.
 - Fixed-response HTML must be 1024 bytes or smaller.
-- In legacy `targetIngress` mode, the target Ingress must be in the same namespace as the `Maintenance` resource.
+- With Ingress-name targeting, the target Ingress must be in the same namespace as the `Maintenance` resource.
 
 See [Roadmap](ROADMAP.md) for planned work, including central platform-team control across namespaces.
 

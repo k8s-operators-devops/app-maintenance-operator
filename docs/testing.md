@@ -69,6 +69,8 @@ kubectl get ingress -n <application-namespace> \
 
 Look for `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>` in the annotations.
 
+To validate direct Ingress-name targeting instead, update and apply `samples/maintenance-enable-ingress.yaml` with `<target-ingress-name>` in the same namespace.
+
 ## Curl Verification
 
 ```sh
@@ -112,6 +114,8 @@ kubectl describe maintenance <maintenance-name> -n <application-namespace>
 
 Before the start time, the resource should report `Pending`. During the window, it should report `Enabled`. At or after the end time, it should report `Disabled` and generated resources should be removed.
 
+To validate scheduled Ingress-name targeting instead, update and apply `samples/maintenance-scheduled-ingress.yaml`.
+
 ## Finalizer Checks
 
 Delete the `Maintenance` resource:
@@ -138,4 +142,4 @@ kubectl logs -n alb-maintenance-operator \
   -c manager
 ```
 
-Look for invalid configuration errors such as missing targeting mode, both targeting modes being set, missing target Ingress in legacy mode, missing ALB group name in legacy mode, non-ALB target Ingress, or fixed-response HTML exceeding 1024 bytes.
+Look for invalid configuration errors such as missing targeting mode, both targeting modes being set, missing target Ingress with Ingress-name targeting, missing ALB group name with Ingress-name targeting, non-ALB target Ingress, or fixed-response HTML exceeding 1024 bytes.
