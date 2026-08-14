@@ -4,7 +4,7 @@ metadata:
   name: <maintenance-name>
   namespace: <application-namespace>
 spec:
-  targetIngress: <target-ingress-name>
+  albGroupName: <alb-ingress-group-name>
   maintenanceMode: true
   response:
     backend: fixed-response

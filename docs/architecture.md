@@ -17,22 +17,21 @@ The operator gives the ALB a higher-priority maintenance rule without rewriting 
 
 ## Maintenance Custom Resource
 
-The `Maintenance` custom resource is the operator API for enabling or disabling maintenance mode for one application Ingress. A resource names a target Ingress through `spec.targetIngress` and controls behavior through `spec.maintenanceMode`.
+The `Maintenance` custom resource is the operator API for enabling or disabling maintenance mode for an ALB IngressGroup. The preferred targeting field is `spec.albGroupName`; legacy target-Ingress mirroring remains available through `spec.targetIngress`.
 
-The target Ingress must already be managed by AWS Load Balancer Controller and must belong to an ALB IngressGroup.
+The ALB IngressGroup must already exist through one or more AWS Load Balancer Controller-managed Ingresses.
 
 ## Reconciliation Flow
 
 When a `Maintenance` resource is created or updated, the controller:
 
 1. Adds a finalizer to the `Maintenance` resource.
-2. Reads the target Ingress from the same namespace.
-3. Validates that the target is ALB-managed and has `alb.ingress.kubernetes.io/group.name`.
-4. Creates a one-time backup ConfigMap owned by the `Maintenance` resource.
-5. Creates or reconciles a separate generated maintenance Ingress.
-6. Updates status phase, message, and the standard `Ready` condition.
+2. Builds the fixed-response ALB action from `spec.response`.
+3. In group mode, discovers existing same-namespace IngressGroup members, resolves their listener ports, and creates or reconciles a standalone catch-all maintenance Ingress for `spec.albGroupName`.
+4. In legacy target-Ingress mode, reads the target Ingress, validates it, creates a one-time backup ConfigMap, and mirrors its rules into the generated maintenance Ingress.
+5. Updates status phase, message, and the standard `Ready` condition.
 
-On disable, the controller deletes the generated maintenance Ingress and backup ConfigMap. It does not patch, replace, or restore the original application Ingress.
+On disable, the controller deletes the generated maintenance Ingress and any backup ConfigMap. It does not patch, replace, or restore the original application Ingress.
 
 On deletion, the controller deletes the generated maintenance Ingress first, waits until it is gone, deletes the backup ConfigMap, and then removes the finalizer.
 
@@ -48,8 +47,9 @@ AWS Load Balancer Controller merges Ingresses with the same `alb.ingress.kuberne
 
 The generated maintenance Ingress:
 
-- copies the target Ingress group name;
+- uses `spec.albGroupName` directly, or copies the target Ingress group name in legacy mode;
 - sets `alb.ingress.kubernetes.io/group.order: "-1000"`;
+- sets `alb.ingress.kubernetes.io/listen-ports` from the discovered ALB group listener ports;
 - removes inherited ALB action annotations;
 - removes target-group-specific health check/backend annotations;
 - adds only `alb.ingress.kubernetes.io/actions.maintenance`.
@@ -83,4 +83,4 @@ The controller watches:
 - owned generated maintenance Ingresses;
 - target Ingress changes filtered by the `spec.targetIngress` field index.
 
-Owned Ingress watches repair drift or manual deletion of the generated maintenance Ingress. Target Ingress watches allow maintenance overlays to be reconciled when the source application Ingress changes.
+Owned Ingress watches repair drift or manual deletion of the generated maintenance Ingress. Target Ingress watches allow legacy maintenance overlays to be reconciled when the source application Ingress changes.
