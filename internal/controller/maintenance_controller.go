@@ -55,6 +55,8 @@ const (
 	albGroupOrderAnnotation = "alb.ingress.kubernetes.io/group.order"
 	albActionAnnotation     = "alb.ingress.kubernetes.io/actions." + maintenanceActionName
 	albIngressClass         = "alb"
+	defaultHTTPListenPorts  = `[{"HTTP":80}]`
+	defaultHTTPSListenPorts = `[{"HTTPS":443}]`
 	fixedResponseBackend    = "fixed-response"
 	ingressBackupDataKey    = "ingress.json"
 )
@@ -564,7 +566,7 @@ func (r *MaintenanceReconciler) resolveGroupListenPorts(ctx context.Context, nam
 		return "", fmt.Errorf("no existing Ingresses found for ALB group %q", albGroupName)
 	}
 	if len(portsByKey) == 0 {
-		return `[{"HTTP":80}]`, nil
+		return defaultHTTPListenPorts, nil
 	}
 
 	ports := make([]listenerPort, 0, len(portsByKey))
@@ -591,9 +593,9 @@ func (r *MaintenanceReconciler) resolveGroupListenPorts(ctx context.Context, nam
 
 func defaultListenPortsForIngress(ingress *networkingv1.Ingress) string {
 	if strings.TrimSpace(ingress.Annotations["alb.ingress.kubernetes.io/certificate-arn"]) != "" {
-		return `[{"HTTPS":443}]`
+		return defaultHTTPSListenPorts
 	}
-	return `[{"HTTP":80}]`
+	return defaultHTTPListenPorts
 }
 
 func parseListenPorts(raw string) ([]listenerPort, error) {
