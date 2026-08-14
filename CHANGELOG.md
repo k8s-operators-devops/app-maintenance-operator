@@ -8,6 +8,18 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 No unreleased changes.
 
+## [v1.2.1] - 2026-08-14
+
+### Changed
+
+- Aligned post-release documentation and configuration wording for ALB IngressGroup and direct Ingress-name targeting.
+- Clarified planned Helm examples so users do not mistake them for a published chart.
+- Updated pinned install, namespaced install, GitOps, docs-site, generated manifest, Kustomize, issue-template, and image-publish references for `v1.2.1`.
+
+### Fixed
+
+- Removed stale release wording, Kubebuilder placeholder comments, and an outdated ServiceMonitor patch reference from repository documentation and configuration.
+
 ## [v1.2.0] - 2026-08-14
 
 ### Added
