@@ -4,9 +4,19 @@
 
 `spec.targetIngress`
 
-Required. Name of the target Ingress in the same namespace as the `Maintenance` resource.
+Optional legacy mode. Name of the target Ingress in the same namespace as the `Maintenance` resource.
 
-The operator uses this field to find the target Ingress. Metadata labels on the `Maintenance` resource do not select the target Ingress.
+The operator uses this field to find the target Ingress, mirror its rules, and replace every HTTP backend with the maintenance fixed response. Metadata labels on the `Maintenance` resource do not select the target Ingress.
+
+`spec.albGroupName`
+
+Optional preferred mode. Name of the ALB IngressGroup to place into maintenance.
+
+The operator creates a standalone maintenance Ingress with `alb.ingress.kubernetes.io/group.name` set to this value, `alb.ingress.kubernetes.io/group.order: "-1000"`, and a catch-all `/*` fixed-response rule. This avoids coupling maintenance behavior to one existing application Ingress and keeps redirect/application routing layouts out of the Maintenance API.
+
+For AWS Load Balancer Controller correctness, the operator discovers existing Ingresses in the same namespace with the requested group name and mirrors the group's listener-port surface onto the generated maintenance Ingress. This matters because ALB IngressGroup rules only affect the listener ports defined for that Ingress.
+
+Set exactly one of `spec.albGroupName` or `spec.targetIngress`.
 
 `spec.maintenanceMode`
 
@@ -48,7 +58,7 @@ Example:
 
 ```yaml
 spec:
-  targetIngress: <target-ingress-name>
+  albGroupName: <alb-ingress-group-name>
   maintenanceMode: true
   schedule:
     start: "2026-07-20T22:00:00Z"
@@ -59,16 +69,43 @@ Equivalent example with an explicit local timezone offset:
 
 ```yaml
 spec:
-  targetIngress: <target-ingress-name>
+  albGroupName: <alb-ingress-group-name>
   maintenanceMode: true
   schedule:
     start: "2026-07-20T18:00:00-04:00"
     end: "2026-07-20T19:00:00-04:00"
 ```
 
-## Target Ingress Requirements
+## ALB Group Mode
 
-The target Ingress must:
+Group mode is the preferred production model:
+
+```yaml
+spec:
+  albGroupName: <alb-ingress-group-name>
+  maintenanceMode: true
+```
+
+Advantages:
+
+- users do not need to know which application Ingress owns a route;
+- redirect and application Ingresses can stay separate;
+- the operator does not copy tenant-specific annotations or paths;
+- maintenance intent maps directly to the ALB IngressGroup boundary;
+- HTTPS listeners are covered when existing group members declare them through `alb.ingress.kubernetes.io/listen-ports` or certificate-based defaults.
+
+In shared ALB groups, group mode affects the group-level routing surface. Use separate ALB IngressGroup names per tenant when tenant isolation is required. At least one existing group member Ingress must be present in the same namespace as the `Maintenance` resource so the operator can discover listener ports.
+
+Discover available group names:
+
+```sh
+kubectl get ingress -n <application-namespace> \
+  -o custom-columns=NAME:.metadata.name,GROUP:.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name,LISTEN_PORTS:.metadata.annotations.alb\.ingress\.kubernetes\.io/listen-ports
+```
+
+## Legacy Target Ingress Mode
+
+When `spec.targetIngress` is used, the target Ingress must:
 
 - exist in the same namespace as the `Maintenance` resource;
 - be ALB-managed through `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`;
@@ -105,10 +142,10 @@ The `config/namespaced` Kustomize profile runs the controller in its own namespa
 Pinned Kustomize install:
 
 ```bash
-kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.1.1
+kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.0
 ```
 
-With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource, target Ingress, generated maintenance Ingress, and backup ConfigMap must all live in that same namespace.
+With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource and generated maintenance Ingress must live in that same namespace. In legacy `targetIngress` mode, the target Ingress and backup ConfigMap must also live there.
 
 For a one-command namespace-scoped install, Helm is the preferred future packaging direction. This repository does not publish a Helm chart yet, so use the `kubectl apply -k` command above for namespace-scoped installs today. The example below documents the intended chart interface:
 
@@ -130,8 +167,8 @@ helm install app-maintenance-operator <chart> \
 Important boundaries:
 
 - CRDs are cluster-scoped Kubernetes resources and still require cluster-level installation permissions.
-- The namespaced profile can reconcile only `Maintenance`, target Ingress, and generated backup ConfigMap resources in the namespace where the operator is installed.
-- The target Ingress must still live in the same namespace as the `Maintenance` resource.
+- The namespaced profile can reconcile only `Maintenance`, generated maintenance Ingress, and generated backup ConfigMap resources in the namespace where the operator is installed.
+- In legacy `targetIngress` mode, the target Ingress must still live in the same namespace as the `Maintenance` resource.
 - The namespaced profile disables the secured metrics endpoint by default to avoid adding cluster-level TokenReview and SubjectAccessReview permissions back into the runtime service account.
 - Do not put `watchNamespace` in the `Maintenance` spec. Watch scope is deployment and RBAC configuration, not application maintenance intent.
 
@@ -201,8 +238,8 @@ Indicates whether the operator has created or accepted an owned backup ConfigMap
 
 `status.backupResourceName`
 
-Name of the backup ConfigMap containing the original target Ingress JSON.
+Name of the backup ConfigMap containing the original target Ingress JSON. This is used only in legacy `targetIngress` mode.
 
 `status.targetIngressResourceVersion`
 
-ResourceVersion of the target Ingress observed when maintenance was enabled.
+ResourceVersion of the target Ingress observed when maintenance was enabled. This is used only in legacy `targetIngress` mode.

@@ -38,6 +38,9 @@ const (
 	testBackupData     = "data"
 	testTargetIngress  = "app-ingress"
 	testMaintenanceUID = "maint-uid"
+	testActionJSON     = "action-json"
+	testDriftedValue   = "drifted"
+	testHTTPHTTPSPorts = `[{"HTTP":80},{"HTTPS":443}]`
 )
 
 func TestBuildALBActionJSON(t *testing.T) {
@@ -141,7 +144,7 @@ func TestAnnotationSanitization(t *testing.T) {
 		"alb.ingress.kubernetes.io/healthcheck-path": "/healthz",
 		"alb.ingress.kubernetes.io/scheme":           testALBScheme,
 		"alb.ingress.kubernetes.io/certificate-arn":  "arn",
-	}, "action-json")
+	}, testActionJSON)
 
 	if _, exists := annotations["alb.ingress.kubernetes.io/actions.old"]; exists {
 		t.Fatalf("expected inherited actions annotation to be removed")
@@ -158,7 +161,7 @@ func TestAnnotationSanitization(t *testing.T) {
 	if got := annotations[albGroupOrderAnnotation]; got != maintenanceGroupOrder {
 		t.Fatalf("expected group order %q, got %q", maintenanceGroupOrder, got)
 	}
-	if got := annotations[albActionAnnotation]; got != "action-json" {
+	if got := annotations[albActionAnnotation]; got != testActionJSON {
 		t.Fatalf("expected maintenance action annotation, got %q", got)
 	}
 }
@@ -172,7 +175,7 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 	maintenance.UID = types.UID(testMaintenanceUID)
 	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(target, maintenance).Build(), Scheme: scheme}
 
-	generated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, "action-json")
+	generated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, testActionJSON)
 	if err != nil {
 		t.Fatalf("ensureMaintenanceIngress returned error: %v", err)
 	}
@@ -188,28 +191,126 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 	if generated.Labels[managedByLabelKey] != managedByLabelValue {
 		t.Fatalf("expected managed-by label")
 	}
-	assertAllHTTPBackends(t, generated, maintenanceActionName)
+	assertAllHTTPBackends(t, generated)
 	if !equalityIngress(target, targetOriginal) {
 		t.Fatalf("target ingress was mutated")
 	}
 
-	generated.Annotations[albActionAnnotation] = "drifted"
+	generated.Annotations[albActionAnnotation] = testDriftedValue
 	generated.Labels["system-added"] = "preserve-me"
-	generated.Spec.Rules[0].HTTP.Paths[0].Backend.Service.Name = "drifted"
+	generated.Spec.Rules[0].HTTP.Paths[0].Backend.Service.Name = testDriftedValue
 	if err := reconciler.Update(ctx, generated); err != nil {
 		t.Fatalf("failed to drift generated ingress: %v", err)
 	}
-	updated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, "action-json")
+	updated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, testActionJSON)
 	if err != nil {
 		t.Fatalf("ensureMaintenanceIngress returned error on update: %v", err)
 	}
-	if updated.Annotations[albActionAnnotation] != "action-json" {
+	if updated.Annotations[albActionAnnotation] != testActionJSON {
 		t.Fatalf("expected drifted action to be repaired")
 	}
 	if updated.Labels["system-added"] != "preserve-me" {
 		t.Fatalf("expected unrelated labels to be preserved")
 	}
-	assertAllHTTPBackends(t, updated, maintenanceActionName)
+	assertAllHTTPBackends(t, updated)
+}
+
+func TestEnsureGroupMaintenanceIngress(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	maintenance := newGroupMaintenance("maint", testALBGroupName)
+	maintenance.UID = types.UID(testMaintenanceUID)
+	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(maintenance).Build(), Scheme: scheme}
+
+	generated, err := reconciler.ensureGroupMaintenanceIngress(ctx, maintenance, testALBGroupName, testHTTPHTTPSPorts, testActionJSON)
+	if err != nil {
+		t.Fatalf("ensureGroupMaintenanceIngress returned error: %v", err)
+	}
+	if generated.Name != maintenanceIngressName(maintenance) {
+		t.Fatalf("expected generated ingress name %q, got %q", maintenanceIngressName(maintenance), generated.Name)
+	}
+	if generated.Annotations[albGroupNameAnnotation] != testALBGroupName {
+		t.Fatalf("expected ALB group %q, got %q", testALBGroupName, generated.Annotations[albGroupNameAnnotation])
+	}
+	if generated.Annotations[albActionAnnotation] != testActionJSON {
+		t.Fatalf("expected maintenance action annotation")
+	}
+	if generated.Annotations["alb.ingress.kubernetes.io/listen-ports"] != testHTTPHTTPSPorts {
+		t.Fatalf("expected listen-ports annotation, got %q", generated.Annotations["alb.ingress.kubernetes.io/listen-ports"])
+	}
+	if generated.Spec.IngressClassName == nil || *generated.Spec.IngressClassName != albIngressClass {
+		t.Fatalf("expected ALB ingress class")
+	}
+	if len(generated.Spec.Rules) != 1 || generated.Spec.Rules[0].HTTP == nil || len(generated.Spec.Rules[0].HTTP.Paths) != 1 {
+		t.Fatalf("expected one catch-all HTTP path, got %#v", generated.Spec.Rules)
+	}
+	path := generated.Spec.Rules[0].HTTP.Paths[0]
+	if path.Path != "/*" || path.PathType == nil || *path.PathType != networkingv1.PathTypeImplementationSpecific {
+		t.Fatalf("expected /* ImplementationSpecific path, got %#v", path)
+	}
+	assertAllHTTPBackends(t, generated)
+
+	generated.Annotations[albActionAnnotation] = testDriftedValue
+	generated.Spec.Rules[0].HTTP.Paths[0].Backend.Service.Name = testDriftedValue
+	if err := reconciler.Update(ctx, generated); err != nil {
+		t.Fatalf("failed to drift generated ingress: %v", err)
+	}
+	updated, err := reconciler.ensureGroupMaintenanceIngress(ctx, maintenance, testALBGroupName, testHTTPHTTPSPorts, testActionJSON)
+	if err != nil {
+		t.Fatalf("ensureGroupMaintenanceIngress returned error on update: %v", err)
+	}
+	if updated.Annotations[albActionAnnotation] != testActionJSON {
+		t.Fatalf("expected drifted action to be repaired")
+	}
+	assertAllHTTPBackends(t, updated)
+}
+
+func TestResolveGroupListenPorts(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	httpIngress := newTargetIngress("http-ingress", testNamespace)
+	httpIngress.Annotations["alb.ingress.kubernetes.io/listen-ports"] = defaultHTTPListenPorts
+	httpsIngress := newTargetIngress("https-ingress", testNamespace)
+	httpsIngress.Annotations["alb.ingress.kubernetes.io/listen-ports"] = defaultHTTPSListenPorts
+	otherGroupIngress := newTargetIngress("other-ingress", testNamespace)
+	otherGroupIngress.Annotations[albGroupNameAnnotation] = "other-group"
+	otherGroupIngress.Annotations["alb.ingress.kubernetes.io/listen-ports"] = `[{"HTTP":8080}]`
+	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(httpIngress, httpsIngress, otherGroupIngress).Build(), Scheme: scheme}
+
+	got, err := reconciler.resolveGroupListenPorts(ctx, testNamespace, testALBGroupName)
+	if err != nil {
+		t.Fatalf("resolveGroupListenPorts returned error: %v", err)
+	}
+	if got != testHTTPHTTPSPorts {
+		t.Fatalf("expected merged HTTP and HTTPS listen ports, got %q", got)
+	}
+}
+
+func TestResolveGroupListenPortsDefaultsFromCertificate(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	ingress := newTargetIngress("cert-ingress", testNamespace)
+	delete(ingress.Annotations, "alb.ingress.kubernetes.io/listen-ports")
+	ingress.Annotations["alb.ingress.kubernetes.io/certificate-arn"] = "arn:aws:acm:us-east-1:123456789012:certificate/example"
+	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(ingress).Build(), Scheme: scheme}
+
+	got, err := reconciler.resolveGroupListenPorts(ctx, testNamespace, testALBGroupName)
+	if err != nil {
+		t.Fatalf("resolveGroupListenPorts returned error: %v", err)
+	}
+	if got != defaultHTTPSListenPorts {
+		t.Fatalf("expected HTTPS default from certificate, got %q", got)
+	}
+}
+
+func TestResolveGroupListenPortsRejectsMissingGroupMembers(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build(), Scheme: scheme}
+
+	if _, err := reconciler.resolveGroupListenPorts(ctx, testNamespace, testALBGroupName); err == nil {
+		t.Fatalf("expected missing group members to fail")
+	}
 }
 
 func TestEnsureMaintenanceIngressRejectsInvalidTargets(t *testing.T) {
@@ -236,8 +337,41 @@ func TestEnsureMaintenanceIngressRejectsInvalidTargets(t *testing.T) {
 			current := target.DeepCopy()
 			tt.mutate(current)
 			reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(maintenance).Build(), Scheme: scheme}
-			if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, current, "action-json"); err == nil {
+			if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, current, testActionJSON); err == nil {
 				t.Fatalf("expected error")
+			}
+		})
+	}
+}
+
+func TestEnableMaintenanceRequiresOneTargetMode(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+
+	tests := []struct {
+		name        string
+		maintenance *k8smaintenancev1alpha1.Maintenance
+		wantMessage string
+	}{
+		{name: "missing target mode", maintenance: newMaintenance("missing", ""), wantMessage: "targetIngress or albGroupName is required"},
+		{name: "both target modes", maintenance: func() *k8smaintenancev1alpha1.Maintenance {
+			m := newMaintenance("both", testTargetIngress)
+			m.Spec.ALBGroupName = testALBGroupName
+			return m
+		}(), wantMessage: "set either targetIngress or albGroupName, not both"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.maintenance).WithStatusSubresource(tt.maintenance).Build(), Scheme: scheme}
+			if _, err := reconciler.enableMaintenance(ctx, tt.maintenance, &tt.maintenance.Status); err != nil {
+				t.Fatalf("enableMaintenance returned error: %v", err)
+			}
+			if tt.maintenance.Status.Phase != "Failed" {
+				t.Fatalf("expected Failed phase, got %q", tt.maintenance.Status.Phase)
+			}
+			if tt.maintenance.Status.Message != tt.wantMessage {
+				t.Fatalf("expected message %q, got %q", tt.wantMessage, tt.maintenance.Status.Message)
 			}
 		})
 	}
@@ -258,7 +392,7 @@ func TestEnsureMaintenanceIngressRejectsExistingIngressWithAnotherOwner(t *testi
 	}
 	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(), Scheme: scheme}
 
-	if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, "action-json"); err == nil {
+	if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, testActionJSON); err == nil {
 		t.Fatalf("expected ownership conflict")
 	}
 }
@@ -497,6 +631,36 @@ var _ = Describe("Maintenance Controller", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: backupConfigMapName(maintenance), Namespace: namespace}, &backup)).To(Succeed())
 		})
 
+		It("creates generated ingress for an ALB group without a target ingress", func() {
+			groupMember := newTargetIngress("group-member-ingress", namespace)
+			groupMember.Annotations["alb.ingress.kubernetes.io/listen-ports"] = `[{"HTTP":80},{"HTTPS":443}]`
+			maintenanceMode := true
+			maintenance := newGroupMaintenance("group-maintenance", testALBGroupName)
+			maintenance.Spec.MaintenanceMode = &maintenanceMode
+			Expect(k8sClient.Create(ctx, groupMember)).To(Succeed())
+			Expect(k8sClient.Create(ctx, maintenance)).To(Succeed())
+
+			reconciler := &MaintenanceReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+			request := reconcile.Request{NamespacedName: types.NamespacedName{Name: maintenance.Name, Namespace: maintenance.Namespace}}
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			var generated networkingv1.Ingress
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: maintenanceIngressName(maintenance), Namespace: namespace}, &generated)).To(Succeed())
+			Expect(generated.Annotations[albGroupNameAnnotation]).To(Equal(testALBGroupName))
+			Expect(generated.Annotations["alb.ingress.kubernetes.io/listen-ports"]).To(Equal(testHTTPHTTPSPorts))
+			Expect(generated.Labels[managedByLabelKey]).To(Equal(managedByLabelValue))
+			assertAllHTTPBackends(GinkgoT(), &generated)
+
+			var updated k8smaintenancev1alpha1.Maintenance
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: maintenance.Name, Namespace: namespace}, &updated)).To(Succeed())
+			Expect(updated.Status.Phase).To(Equal("Enabled"))
+			Expect(updated.Status.BackupCreated).To(BeFalse())
+			Expect(updated.Status.TargetIngressResourceVersion).To(BeEmpty())
+		})
+
 		It("sets failed status when target ingress is missing", func() {
 			maintenanceMode := true
 			maintenance := newMaintenance("missing-target", "does-not-exist")
@@ -542,7 +706,7 @@ var _ = Describe("Maintenance Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: generatedName, Namespace: namespace}, &generated)).To(Succeed())
 			Expect(generated.Labels[managedByLabelKey]).To(Equal(managedByLabelValue))
-			assertAllHTTPBackends(GinkgoT(), &generated, maintenanceActionName)
+			assertAllHTTPBackends(GinkgoT(), &generated)
 		})
 
 		It("removes the finalizer only after the generated ingress is gone", func() {
@@ -608,6 +772,12 @@ func newMaintenance(name, target string) *k8smaintenancev1alpha1.Maintenance {
 			MaintenanceMode: &maintenanceMode,
 		},
 	}
+}
+
+func newGroupMaintenance(name, albGroupName string) *k8smaintenancev1alpha1.Maintenance {
+	maintenance := newMaintenance(name, "")
+	maintenance.Spec.ALBGroupName = albGroupName
+	return maintenance
 }
 
 func boolPtr(value bool) *bool {
@@ -681,14 +851,14 @@ type testFatalHelper interface {
 	Fatalf(format string, args ...any)
 }
 
-func assertAllHTTPBackends(t testFatalHelper, ingress *networkingv1.Ingress, serviceName string) {
+func assertAllHTTPBackends(t testFatalHelper, ingress *networkingv1.Ingress) {
 	t.Helper()
 	for _, rule := range ingress.Spec.Rules {
 		if rule.HTTP == nil {
 			continue
 		}
 		for _, path := range rule.HTTP.Paths {
-			if path.Backend.Service == nil || path.Backend.Service.Name != serviceName || path.Backend.Service.Port.Name != "use-annotation" {
+			if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != "use-annotation" {
 				t.Fatalf("unexpected backend: %#v", path.Backend)
 			}
 		}

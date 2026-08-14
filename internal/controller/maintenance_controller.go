@@ -55,6 +55,8 @@ const (
 	albGroupOrderAnnotation = "alb.ingress.kubernetes.io/group.order"
 	albActionAnnotation     = "alb.ingress.kubernetes.io/actions." + maintenanceActionName
 	albIngressClass         = "alb"
+	defaultHTTPListenPorts  = `[{"HTTP":80}]`
+	defaultHTTPSListenPorts = `[{"HTTPS":443}]`
 	fixedResponseBackend    = "fixed-response"
 	ingressBackupDataKey    = "ingress.json"
 )
@@ -88,6 +90,11 @@ type fixedResponseConfig struct {
 	StatusCode  string `json:"statusCode"`
 	ContentType string `json:"contentType"`
 	MessageBody string `json:"messageBody"`
+}
+
+type listenerPort struct {
+	Protocol string
+	Port     int
 }
 
 // +kubebuilder:rbac:groups=k8smaintenance.io,resources=maintenances,verbs=get;list;watch;create;update;patch;delete
@@ -211,21 +218,42 @@ func (r *MaintenanceReconciler) enableMaintenance(
 	maintenance *k8smaintenancev1alpha1.Maintenance,
 	origStatus *k8smaintenancev1alpha1.MaintenanceStatus,
 ) (ctrl.Result, error) {
-	if strings.TrimSpace(maintenance.Spec.TargetIngress) == "" {
-		return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", "target ingress is required")
+	targetIngressName := strings.TrimSpace(maintenance.Spec.TargetIngress)
+	albGroupName := strings.TrimSpace(maintenance.Spec.ALBGroupName)
+	if targetIngressName == "" && albGroupName == "" {
+		return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", "targetIngress or albGroupName is required")
 	}
-
-	var targetIngress networkingv1.Ingress
-	if err := r.Get(ctx, types.NamespacedName{Name: maintenance.Spec.TargetIngress, Namespace: maintenance.Namespace}, &targetIngress); err != nil {
-		if apierrors.IsNotFound(err) {
-			return r.permanentFailure(ctx, maintenance, origStatus, "TargetIngressNotFound", fmt.Sprintf("target ingress %s/%s was not found", maintenance.Namespace, maintenance.Spec.TargetIngress))
-		}
-		return r.fail(ctx, maintenance, origStatus, "TargetIngressNotFound", "failed to fetch target ingress: "+err.Error(), err)
+	if targetIngressName != "" && albGroupName != "" {
+		return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", "set either targetIngress or albGroupName, not both")
 	}
 
 	actionJSON, err := buildALBActionJSON(maintenance)
 	if err != nil {
 		return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", err.Error())
+	}
+
+	if albGroupName != "" {
+		listenPorts, err := r.resolveGroupListenPorts(ctx, maintenance.Namespace, albGroupName)
+		if err != nil {
+			return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", err.Error())
+		}
+		if _, err := r.ensureGroupMaintenanceIngress(ctx, maintenance, albGroupName, listenPorts, actionJSON); err != nil {
+			return r.fail(ctx, maintenance, origStatus, "MaintenanceIngressReconcileFailed", "failed to reconcile maintenance ingress: "+err.Error(), err)
+		}
+
+		maintenance.Status.BackupCreated = false
+		maintenance.Status.BackupResourceName = ""
+		maintenance.Status.TargetIngressResourceVersion = ""
+		setMaintenanceStatus(maintenance, "Enabled", "Maintenance mode enabled for ALB group "+albGroupName, metav1.ConditionTrue, "MaintenanceEnabled")
+		return ctrl.Result{}, r.updateStatusIfChanged(ctx, maintenance, origStatus)
+	}
+
+	var targetIngress networkingv1.Ingress
+	if err := r.Get(ctx, types.NamespacedName{Name: targetIngressName, Namespace: maintenance.Namespace}, &targetIngress); err != nil {
+		if apierrors.IsNotFound(err) {
+			return r.permanentFailure(ctx, maintenance, origStatus, "TargetIngressNotFound", fmt.Sprintf("target ingress %s/%s was not found", maintenance.Namespace, targetIngressName))
+		}
+		return r.fail(ctx, maintenance, origStatus, "TargetIngressNotFound", "failed to fetch target ingress: "+err.Error(), err)
 	}
 
 	if err := r.createIngressBackup(ctx, maintenance, &targetIngress); err != nil {
@@ -410,6 +438,188 @@ func (r *MaintenanceReconciler) ensureMaintenanceIngress(
 		}
 	}
 	return &existing, nil
+}
+
+func (r *MaintenanceReconciler) ensureGroupMaintenanceIngress(
+	ctx context.Context,
+	maintenance *k8smaintenancev1alpha1.Maintenance,
+	albGroupName string,
+	listenPorts string,
+	actionJSON string,
+) (*networkingv1.Ingress, error) {
+	pathType := networkingv1.PathTypeImplementationSpecific
+	className := albIngressClass
+	desired := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      maintenanceIngressName(maintenance),
+			Namespace: maintenance.Namespace,
+			Labels: map[string]string{
+				managedByLabelKey: managedByLabelValue,
+			},
+			Annotations: map[string]string{
+				albGroupNameAnnotation:  albGroupName,
+				albGroupOrderAnnotation: maintenanceGroupOrder,
+				albActionAnnotation:     actionJSON,
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: &className,
+			Rules: []networkingv1.IngressRule{{
+				IngressRuleValue: networkingv1.IngressRuleValue{
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{{
+							Path:     "/*",
+							PathType: &pathType,
+							Backend:  *maintenanceBackend(),
+						}},
+					},
+				},
+			}},
+		},
+	}
+	if strings.TrimSpace(listenPorts) != "" {
+		desired.Annotations["alb.ingress.kubernetes.io/listen-ports"] = listenPorts
+	}
+	if err := ctrl.SetControllerReference(maintenance, desired, r.Scheme); err != nil {
+		return nil, err
+	}
+
+	var existing networkingv1.Ingress
+	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, err
+		}
+		if err := r.Create(ctx, desired); err != nil {
+			return nil, err
+		}
+		return desired, nil
+	}
+
+	if !metav1.IsControlledBy(&existing, maintenance) {
+		return nil, fmt.Errorf("maintenance ingress %s/%s is not controlled by maintenance %s/%s", existing.Namespace, existing.Name, maintenance.Namespace, maintenance.Name)
+	}
+
+	changed := false
+	if existing.Labels == nil {
+		existing.Labels = map[string]string{}
+	}
+	if existing.Labels[managedByLabelKey] != managedByLabelValue {
+		existing.Labels[managedByLabelKey] = managedByLabelValue
+		changed = true
+	}
+
+	nextAnnotations := reconcileAnnotations(existing.Annotations, desired.Annotations)
+	if !equality.Semantic.DeepEqual(existing.Annotations, nextAnnotations) {
+		existing.Annotations = nextAnnotations
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.Spec, desired.Spec) {
+		existing.Spec = desired.Spec
+		changed = true
+	}
+	if !equality.Semantic.DeepEqual(existing.OwnerReferences, desired.OwnerReferences) {
+		existing.OwnerReferences = desired.OwnerReferences
+		changed = true
+	}
+	if changed {
+		if err := r.Update(ctx, &existing); err != nil {
+			return nil, err
+		}
+	}
+	return &existing, nil
+}
+
+func (r *MaintenanceReconciler) resolveGroupListenPorts(ctx context.Context, namespace, albGroupName string) (string, error) {
+	var ingresses networkingv1.IngressList
+	if err := r.List(ctx, &ingresses, client.InNamespace(namespace)); err != nil {
+		return "", fmt.Errorf("failed to list ingresses in namespace %q while resolving ALB group %q listener ports: %w", namespace, albGroupName, err)
+	}
+
+	seenMembers := false
+	portsByKey := map[string]listenerPort{}
+	for i := range ingresses.Items {
+		ingress := &ingresses.Items[i]
+		if ingress.Namespace == namespace && ingress.Labels[managedByLabelKey] == managedByLabelValue {
+			continue
+		}
+		if strings.TrimSpace(ingress.Annotations[albGroupNameAnnotation]) != albGroupName {
+			continue
+		}
+		seenMembers = true
+
+		rawListenPorts := strings.TrimSpace(ingress.Annotations["alb.ingress.kubernetes.io/listen-ports"])
+		if rawListenPorts == "" {
+			rawListenPorts = defaultListenPortsForIngress(ingress)
+		}
+		ports, err := parseListenPorts(rawListenPorts)
+		if err != nil {
+			return "", fmt.Errorf("ingress %s/%s has invalid alb.ingress.kubernetes.io/listen-ports: %w", ingress.Namespace, ingress.Name, err)
+		}
+		for _, port := range ports {
+			key := fmt.Sprintf("%s/%d", port.Protocol, port.Port)
+			portsByKey[key] = port
+		}
+	}
+
+	if !seenMembers {
+		return "", fmt.Errorf("no existing Ingresses found for ALB group %q", albGroupName)
+	}
+	if len(portsByKey) == 0 {
+		return defaultHTTPListenPorts, nil
+	}
+
+	ports := make([]listenerPort, 0, len(portsByKey))
+	for _, port := range portsByKey {
+		ports = append(ports, port)
+	}
+	slices.SortFunc(ports, func(a, b listenerPort) int {
+		if a.Port != b.Port {
+			return a.Port - b.Port
+		}
+		return strings.Compare(a.Protocol, b.Protocol)
+	})
+
+	rendered := make([]map[string]int, 0, len(ports))
+	for _, port := range ports {
+		rendered = append(rendered, map[string]int{port.Protocol: port.Port})
+	}
+	out, err := json.Marshal(rendered)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func defaultListenPortsForIngress(ingress *networkingv1.Ingress) string {
+	if strings.TrimSpace(ingress.Annotations["alb.ingress.kubernetes.io/certificate-arn"]) != "" {
+		return defaultHTTPSListenPorts
+	}
+	return defaultHTTPListenPorts
+}
+
+func parseListenPorts(raw string) ([]listenerPort, error) {
+	var entries []map[string]int
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return nil, err
+	}
+	ports := make([]listenerPort, 0, len(entries))
+	for _, entry := range entries {
+		if len(entry) != 1 {
+			return nil, fmt.Errorf("each listener entry must define exactly one protocol and port")
+		}
+		for protocol, port := range entry {
+			protocol = strings.ToUpper(strings.TrimSpace(protocol))
+			if protocol != "HTTP" && protocol != "HTTPS" {
+				return nil, fmt.Errorf("unsupported listener protocol %q", protocol)
+			}
+			if port <= 0 || port > 65535 {
+				return nil, fmt.Errorf("invalid listener port %d", port)
+			}
+			ports = append(ports, listenerPort{Protocol: protocol, Port: port})
+		}
+	}
+	return ports, nil
 }
 
 func validateTargetIngress(ingress *networkingv1.Ingress) error {
@@ -612,6 +822,9 @@ func backupConfigMapName(maintenance *k8smaintenancev1alpha1.Maintenance) string
 
 func maintenanceIngressName(maintenance *k8smaintenancev1alpha1.Maintenance) string {
 	base := maintenance.Spec.TargetIngress
+	if base == "" {
+		base = maintenance.Spec.ALBGroupName
+	}
 	if base == "" {
 		base = maintenance.Name
 	}

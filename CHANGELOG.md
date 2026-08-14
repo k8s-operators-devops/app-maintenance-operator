@@ -6,6 +6,27 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [v1.2.0] - 2026-08-14
+
+### Added
+
+- Added preferred ALB IngressGroup-based maintenance targeting with `spec.albGroupName`.
+
+### Changed
+
+- Updated samples and documentation to use group-based maintenance as the default path while keeping `spec.targetIngress` as legacy compatibility.
+- Updated pinned install, namespaced install, generated manifest, Kustomize, issue-template, docs-site, and image-publish references for `v1.2.0`.
+
+### Security
+
+- Included the approved high-priority Dependabot update for `github.com/google/cel-go` from `v0.26.0` to `v0.29.0`.
+
+### Fixed
+
+- Fixed release-branch lint findings for repeated listener/action literals and an unused test-helper parameter.
+
 ## [v1.1.1] - 2026-08-10
 
 ### Changed

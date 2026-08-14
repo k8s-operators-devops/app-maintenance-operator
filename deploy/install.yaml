@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.1.1
+    app.kubernetes.io/version: v1.2.0
     control-plane: alb-maintenance
   name: alb-maintenance-operator
 ---
@@ -27,6 +27,9 @@ spec:
   - additionalPrinterColumns:
     - jsonPath: .spec.targetIngress
       name: Ingress
+      type: string
+    - jsonPath: .spec.albGroupName
+      name: ALBGroup
       type: string
     - jsonPath: .spec.maintenanceMode
       name: Mode
@@ -62,6 +65,18 @@ spec:
           spec:
             description: Desired state.
             properties:
+              albGroupName:
+                description: |-
+                  ALB IngressGroup name to place into maintenance.
+
+                  This preferred mode creates a standalone catch-all maintenance Ingress in
+                  the specified ALB IngressGroup, without requiring users to identify or
+                  mirror an existing application Ingress.
+
+                  The operator discovers existing same-namespace Ingresses with this group
+                  name to resolve listener ports for the generated maintenance Ingress.
+                minLength: 1
+                type: string
               maintenanceMode:
                 description: |-
                   MaintenanceMode is the master switch for maintenance behavior.
@@ -126,11 +141,13 @@ spec:
                     type: string
                 type: object
               targetIngress:
-                description: Name of the target Ingress.
-                minLength: 1
+                description: |-
+                  Name of the target Ingress.
+
+                  This legacy mode creates a maintenance Ingress by mirroring the target
+                  Ingress rules and replacing all HTTP backends with the maintenance
+                  response.
                 type: string
-            required:
-            - targetIngress
             type: object
           status:
             description: Observed state.
@@ -241,7 +258,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.1.1
+    app.kubernetes.io/version: v1.2.0
   name: alb-maintenance
   namespace: alb-maintenance-operator
 ---
@@ -252,7 +269,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.1.1
+    app.kubernetes.io/version: v1.2.0
   name: alb-maintenance-leader-election-role
   namespace: alb-maintenance-operator
 rules:
@@ -450,7 +467,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.1.1
+    app.kubernetes.io/version: v1.2.0
   name: alb-maintenance-leader-election-rolebinding
   namespace: alb-maintenance-operator
 roleRef:
@@ -469,7 +486,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.1.1
+    app.kubernetes.io/version: v1.2.0
   name: alb-maintenance-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -500,7 +517,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.1.1
+    app.kubernetes.io/version: v1.2.0
     control-plane: alb-maintenance
   name: alb-maintenance-metrics
   namespace: alb-maintenance-operator
@@ -521,7 +538,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.1.1
+    app.kubernetes.io/version: v1.2.0
     control-plane: alb-maintenance
   name: alb-maintenance
   namespace: alb-maintenance-operator
@@ -538,7 +555,7 @@ spec:
       labels:
         app.kubernetes.io/component: controller
         app.kubernetes.io/name: app-maintenance-operator
-        app.kubernetes.io/version: v1.1.1
+        app.kubernetes.io/version: v1.2.0
         control-plane: alb-maintenance
     spec:
       containers:
@@ -550,8 +567,8 @@ spec:
         - /manager
         env:
         - name: OPERATOR_VERSION
-          value: v1.1.1
-        image: ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.1.1
+          value: v1.2.0
+        image: ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.2.0
         livenessProbe:
           httpGet:
             path: /healthz
