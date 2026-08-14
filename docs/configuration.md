@@ -4,13 +4,13 @@
 
 `spec.targetIngress`
 
-Optional legacy mode. Name of the target Ingress in the same namespace as the `Maintenance` resource.
+Optional Ingress-name targeting mode. Name of the target Ingress in the same namespace as the `Maintenance` resource.
 
 The operator uses this field to find the target Ingress, mirror its rules, and replace every HTTP backend with the maintenance fixed response. Metadata labels on the `Maintenance` resource do not select the target Ingress.
 
 `spec.albGroupName`
 
-Optional preferred mode. Name of the ALB IngressGroup to place into maintenance.
+Optional recommended targeting mode. Name of the ALB IngressGroup to place into maintenance.
 
 The operator creates a standalone maintenance Ingress with `alb.ingress.kubernetes.io/group.name` set to this value, `alb.ingress.kubernetes.io/group.order: "-1000"`, and a catch-all `/*` fixed-response rule. This avoids coupling maintenance behavior to one existing application Ingress and keeps redirect/application routing layouts out of the Maintenance API.
 
@@ -76,9 +76,9 @@ spec:
     end: "2026-07-20T19:00:00-04:00"
 ```
 
-## ALB Group Mode
+## ALB IngressGroup Targeting
 
-Group mode is the preferred production model:
+For AWS ALB group-level maintenance, group targeting is the cleanest production model:
 
 ```yaml
 spec:
@@ -103,7 +103,7 @@ kubectl get ingress -n <application-namespace> \
   -o custom-columns=NAME:.metadata.name,GROUP:.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name,LISTEN_PORTS:.metadata.annotations.alb\.ingress\.kubernetes\.io/listen-ports
 ```
 
-## Legacy Target Ingress Mode
+## Ingress Name Targeting
 
 When `spec.targetIngress` is used, the target Ingress must:
 
@@ -123,6 +123,14 @@ kubectl describe ingress <target-ingress-name> -n <application-namespace>
 ```
 
 Confirm the annotations include `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`.
+
+Example:
+
+```yaml
+spec:
+  targetIngress: <target-ingress-name>
+  maintenanceMode: true
+```
 
 ## Namespace-Scoped Operation
 
@@ -145,7 +153,7 @@ Pinned Kustomize install:
 kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.0
 ```
 
-With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource and generated maintenance Ingress must live in that same namespace. In legacy `targetIngress` mode, the target Ingress and backup ConfigMap must also live there.
+With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource and generated maintenance Ingress must live in that same namespace. With Ingress-name targeting, the target Ingress and backup ConfigMap must also live there.
 
 For a one-command namespace-scoped install, Helm is the preferred future packaging direction. This repository does not publish a Helm chart yet, so use the `kubectl apply -k` command above for namespace-scoped installs today. The example below documents the intended chart interface:
 
@@ -168,7 +176,7 @@ Important boundaries:
 
 - CRDs are cluster-scoped Kubernetes resources and still require cluster-level installation permissions.
 - The namespaced profile can reconcile only `Maintenance`, generated maintenance Ingress, and generated backup ConfigMap resources in the namespace where the operator is installed.
-- In legacy `targetIngress` mode, the target Ingress must still live in the same namespace as the `Maintenance` resource.
+- With Ingress-name targeting, the target Ingress must still live in the same namespace as the `Maintenance` resource.
 - The namespaced profile disables the secured metrics endpoint by default to avoid adding cluster-level TokenReview and SubjectAccessReview permissions back into the runtime service account.
 - Do not put `watchNamespace` in the `Maintenance` spec. Watch scope is deployment and RBAC configuration, not application maintenance intent.
 
@@ -186,16 +194,34 @@ Enable maintenance:
 kubectl apply -f samples/maintenance-enable.yaml
 ```
 
+Enable maintenance by Ingress name:
+
+```sh
+kubectl apply -f samples/maintenance-enable-ingress.yaml
+```
+
 Disable maintenance:
 
 ```sh
 kubectl apply -f samples/maintenance-disable.yaml
 ```
 
+Disable maintenance by Ingress name:
+
+```sh
+kubectl apply -f samples/maintenance-disable-ingress.yaml
+```
+
 Schedule maintenance:
 
 ```sh
 kubectl apply -f samples/maintenance-scheduled.yaml
+```
+
+Schedule maintenance by Ingress name:
+
+```sh
+kubectl apply -f samples/maintenance-scheduled-ingress.yaml
 ```
 
 Patch an existing resource:
@@ -238,8 +264,8 @@ Indicates whether the operator has created or accepted an owned backup ConfigMap
 
 `status.backupResourceName`
 
-Name of the backup ConfigMap containing the original target Ingress JSON. This is used only in legacy `targetIngress` mode.
+Name of the backup ConfigMap containing the original target Ingress JSON. This is used only with Ingress-name targeting.
 
 `status.targetIngressResourceVersion`
 
-ResourceVersion of the target Ingress observed when maintenance was enabled. This is used only in legacy `targetIngress` mode.
+ResourceVersion of the target Ingress observed when maintenance was enabled. This is used only with Ingress-name targeting.

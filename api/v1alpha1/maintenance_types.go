@@ -26,17 +26,17 @@ type MaintenanceSpec struct {
 
 	// Name of the target Ingress.
 	//
-	// This legacy mode creates a maintenance Ingress by mirroring the target
-	// Ingress rules and replacing all HTTP backends with the maintenance
-	// response.
+	// This supported targeting mode creates a maintenance Ingress by mirroring
+	// the target Ingress rules and replacing all HTTP backends with the
+	// maintenance response.
 	// +optional
 	TargetIngress string `json:"targetIngress,omitempty"`
 
 	// ALB IngressGroup name to place into maintenance.
 	//
-	// This preferred mode creates a standalone catch-all maintenance Ingress in
-	// the specified ALB IngressGroup, without requiring users to identify or
-	// mirror an existing application Ingress.
+	// This recommended targeting mode creates a standalone catch-all maintenance
+	// Ingress in the specified ALB IngressGroup, without requiring users to
+	// identify or mirror an existing application Ingress.
 	//
 	// The operator discovers existing same-namespace Ingresses with this group
 	// name to resolve listener ports for the generated maintenance Ingress.
