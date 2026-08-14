@@ -1,5 +1,9 @@
 # Architecture
 
+`app-maintenance-operator` is an ALB maintenance operator for Kubernetes. It helps platform teams enable scheduled AWS ALB maintenance pages through Kubernetes custom resources while leaving application-owned Ingress objects untouched.
+
+Start with the [project README](../README.md) for installation and usage, or open the [GitHub Pages documentation](https://k8s-operators-devops.github.io/app-maintenance-operator/) for the public landing page.
+
 ## At a Glance
 
 ```mermaid

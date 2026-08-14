@@ -281,6 +281,8 @@ The generated maintenance Ingress should be removed. Normal application routing 
 
 Set `spec.maintenanceMode: true` and use `spec.schedule.start` and `spec.schedule.end` to let the controller enable and disable maintenance mode automatically. Timestamps must be RFC3339 values. Choose the timezone that matches your change window by using either `Z` for UTC or an explicit offset such as `-04:00` or `+05:30`.
 
+The same scheduled ALB IngressGroup example is available as `samples/maintenance-scheduled.yaml`.
+
 ```yaml
 apiVersion: k8smaintenance.io/v1alpha1
 kind: Maintenance
@@ -291,20 +293,21 @@ spec:
   albGroupName: <alb-ingress-group-name>
   maintenanceMode: true
   schedule:
-    start: "2026-07-20T22:00:00Z"
-    end: "2026-07-20T23:00:00Z"
+    # Replace with RFC3339 timestamps, for example 2026-09-01T22:00:00Z.
+    start: "<start-time-rfc3339>"
+    end: "<end-time-rfc3339>"
   response:
     backend: fixed-response
     html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
 ```
 
-Apply the scheduled sample:
+After replacing the placeholders with your namespace, ALB IngressGroup name, and RFC3339 timestamps, apply the scheduled sample:
 
 ```bash
 kubectl apply -f samples/maintenance-scheduled.yaml
 ```
 
-For Ingress-name targeting:
+For Ingress-name targeting, replace the placeholders and apply the direct Ingress-name scheduled sample:
 
 ```bash
 kubectl apply -f samples/maintenance-scheduled-ingress.yaml
@@ -328,8 +331,32 @@ schedule:
 
 ## Uninstall
 
+Delete `Maintenance` resources before removing the operator. This gives the controller a chance to run its finalizer cleanup, delete generated maintenance Ingresses, and remove backup ConfigMaps while the operator is still running.
+
+For a global scoped install:
+
 ```bash
-kubectl delete -f deploy/install.yaml
+kubectl get maintenance -A
+kubectl delete maintenance --all -A
+kubectl get maintenance -A
+kubectl delete -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.2.1/deploy/install.yaml
+```
+
+For a namespace scoped install, delete `Maintenance` resources from the namespace watched by that operator instance:
+
+```bash
+kubectl get maintenance -n <application-namespace>
+kubectl delete maintenance --all -n <application-namespace>
+kubectl get maintenance -n <application-namespace>
+kubectl delete -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.1
+```
+
+Wait until `kubectl get maintenance` returns no resources before deleting the install manifest. If a `Maintenance` resource stays in `Terminating`, inspect the generated maintenance Ingress and operator logs before removing finalizers manually:
+
+```bash
+kubectl get ingress -n <application-namespace>
+kubectl describe ingress -n <application-namespace> <generated-maintenance-ingress-name>
+kubectl logs -n alb-maintenance-operator deploy/alb-maintenance
 ```
 
 ## Troubleshooting

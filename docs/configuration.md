@@ -1,5 +1,9 @@
 # Configuration
 
+`app-maintenance-operator` is an ALB maintenance operator for Kubernetes. This page documents the `Maintenance` custom resource used to enable, schedule, and disable AWS ALB fixed-response maintenance pages.
+
+Start with the [project README](../README.md) for installation and usage, or open the [GitHub Pages documentation](https://k8s-operators-devops.github.io/app-maintenance-operator/) for the public landing page.
+
 ## Maintenance Spec
 
 `spec.targetIngress`
