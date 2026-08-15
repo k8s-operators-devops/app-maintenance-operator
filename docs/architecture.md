@@ -4,6 +4,8 @@
 
 Start with the [project README](../README.md) for installation and usage, or open the [GitHub Pages documentation](https://k8s-operators-devops.github.io/app-maintenance-operator/) for the public landing page.
 
+> **Architecture principle:** Route AWS ALB Ingress traffic to a maintenance response with a high-priority ALB listener rule while preserving existing application Ingress routing, redirects, and backend rules.
+
 ## At a Glance
 
 ```mermaid
@@ -17,7 +19,21 @@ flowchart LR
     Service -. unchanged .-> Pods[Application Pods]
 ```
 
-The operator gives the ALB a higher-priority maintenance rule without rewriting the application team's Ingress. That is the whole value proposition.
+The operator gives the ALB a higher-priority maintenance rule without rewriting the application team's Ingress. This is the core architectural value: maintenance routing is isolated from application routing ownership.
+
+## Problem Statement
+
+ALB-backed Kubernetes applications often need a temporary maintenance response during planned change windows, platform migrations, dependency outages, or controlled release activities. The risky approach is to edit application Ingress rules or ALB listener rules directly. That couples maintenance operations to production routing and increases the blast radius of a routine operational task.
+
+This operator solves that problem by keeping maintenance intent in Kubernetes and using reconciliation to manage a generated overlay Ingress. AWS Load Balancer Controller converts that overlay into the ALB listener rule that serves the maintenance response.
+
+## Kubernetes-Native Advantages
+
+- The `Maintenance` custom resource is the declarative source of truth for maintenance intent.
+- The controller reconciles generated resources instead of relying on manual ALB console changes.
+- Application-owned Ingress objects remain stable and auditable.
+- Scheduled windows are represented in Kubernetes API state through `spec.schedule`.
+- Finalizers give the controller a chance to clean up generated resources before deletion completes.
 
 ## Maintenance Custom Resource
 
@@ -41,7 +57,9 @@ On deletion, the controller deletes the generated maintenance Ingress first, wai
 
 ## Overlay Ingress Model
 
-The operator uses an overlay model. The application Ingress remains the business-owned routing object. The maintenance Ingress is a temporary operator-owned object that joins the same ALB group and takes precedence.
+The operator uses an overlay model. The application Ingress remains the business-owned routing object. The maintenance Ingress is a temporary operator-owned object that joins the same ALB group and takes precedence. AWS Load Balancer Controller reconciles that generated Ingress into a higher-priority ALB listener rule.
+
+> **Key point:** Maintenance mode is implemented as an overlay listener rule, not by rewriting application-owned Ingress routes.
 
 This model avoids a risky anti-pattern: mutating production application routing state and later attempting to restore it from a backup. In cloud operations, that kind of restore logic is a sharp edge. The operator keeps the application Ingress read-only during normal enable and disable.
 
@@ -57,7 +75,8 @@ The generated maintenance Ingress:
 - creates a single catch-all `/*` fixed-response rule;
 - removes inherited ALB action annotations;
 - removes target-group-specific health check/backend annotations;
-- adds only `alb.ingress.kubernetes.io/actions.maintenance`.
+- adds only `alb.ingress.kubernetes.io/actions.maintenance`;
+- becomes a higher-priority ALB listener rule through AWS Load Balancer Controller reconciliation.
 
 ## Normal Traffic Flow
 

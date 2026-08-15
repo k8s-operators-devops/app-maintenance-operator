@@ -4,6 +4,19 @@
 
 Start with the [project README](../README.md) for installation and usage, or open the [GitHub Pages documentation](https://k8s-operators-devops.github.io/app-maintenance-operator/) for the public landing page.
 
+> **Purpose:** Route AWS ALB Ingress traffic to a maintenance response with a high-priority ALB listener rule while preserving existing application Ingress routing, redirects, and backend rules.
+
+## Problem and Operating Model
+
+The operator is designed for teams that need predictable maintenance windows without making direct, manual changes to application Ingress objects or AWS ALB listener rules. The `Maintenance` custom resource declares the desired maintenance state, and the controller reconciles a generated overlay Ingress for AWS Load Balancer Controller to publish as a higher-priority listener rule.
+
+This Kubernetes-native model keeps application routing ownership clean:
+
+- application Ingress paths, redirects, actions, and backend service rules remain unchanged;
+- maintenance behavior is expressed through Kubernetes API state;
+- schedule, status, finalizer cleanup, and troubleshooting all remain visible through `kubectl`;
+- generated maintenance resources can be managed through normal RBAC, audit, and GitOps controls.
+
 ## Maintenance Spec
 
 `spec.targetIngress`
@@ -16,7 +29,9 @@ The operator uses this field to find the target Ingress and reuse its ALB metada
 
 Optional recommended targeting mode. Name of the ALB IngressGroup to place into maintenance.
 
-The operator creates a standalone maintenance Ingress with `alb.ingress.kubernetes.io/group.name` set to this value, `alb.ingress.kubernetes.io/group.order: "-1000"`, and a catch-all `/*` fixed-response rule. This avoids coupling maintenance behavior to one existing application Ingress and keeps redirect/application routing layouts out of the Maintenance API.
+The operator creates a standalone maintenance Ingress with `alb.ingress.kubernetes.io/group.name` set to this value, `alb.ingress.kubernetes.io/group.order: "-1000"`, and a catch-all `/*` fixed-response rule. AWS Load Balancer Controller reconciles that generated Ingress into a higher-priority ALB listener rule. This avoids coupling maintenance behavior to one existing application Ingress and keeps redirect/application routing layouts out of the Maintenance API.
+
+> **Operational model:** The generated maintenance Ingress creates the maintenance listener rule. Existing application redirect rules, paths, and backend service rules stay owned by the application Ingress.
 
 For AWS Load Balancer Controller correctness, the operator discovers existing Ingresses in the same namespace with the requested group name and mirrors the group's listener-port surface onto the generated maintenance Ingress. This matters because ALB IngressGroup rules only affect the listener ports defined for that Ingress.
 
@@ -115,7 +130,7 @@ When `spec.targetIngress` is used, the target Ingress must:
 - be ALB-managed through `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`;
 - define the ALB IngressGroup ID/name with `alb.ingress.kubernetes.io/group.name`.
 
-The operator copies ALB-level annotations that are relevant to the load balancer and removes annotations that conflict with fixed-response behavior. It does not copy application paths, redirect rules, or default backends from the target Ingress into the generated maintenance Ingress.
+The operator copies ALB-level annotations that are relevant to the load balancer and removes annotations that conflict with fixed-response behavior. It does not copy application paths, redirect rules, or default backends from the target Ingress into the generated maintenance Ingress. AWS Load Balancer Controller turns the generated Ingress into one higher-priority ALB listener rule for the maintenance fixed response.
 
 The group name is mandatory because the operator creates a separate maintenance Ingress that joins the same ALB IngressGroup as the existing application Ingress. If the target Ingress is not grouped, the controller reports `InvalidConfiguration` and does not create the maintenance overlay.
 
