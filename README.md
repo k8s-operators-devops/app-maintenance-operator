@@ -45,8 +45,33 @@ Maintenance windows for ALB-backed Kubernetes applications are often handled by 
 - `kubectl` access to the target cluster.
 - A `kubectl` client that is within one minor version of the cluster control plane.
 - At least one existing ALB-backed application Ingress that is already working through AWS Load Balancer Controller.
+- AWS Load Balancer Controller IAM permissions that allow ALB listener rule management.
 
 Start in a non-production namespace first. IngressGroup is powerful: any user who can create or update Ingresses in the same ALB IngressGroup can affect routing for that group.
+
+### AWS Load Balancer Controller IAM
+
+The generated maintenance Ingress is reconciled by AWS Load Balancer Controller, so the required AWS IAM permissions must be attached to the AWS Load Balancer Controller role or service account. Do not attach AWS ALB permissions to the app-maintenance-operator service account; this operator creates Kubernetes resources, while AWS Load Balancer Controller creates and updates the ALB listener rules.
+
+Use the official AWS Load Balancer Controller IAM policy for your controller version. At minimum, the controller role must be able to describe listeners/rules and create, modify, reprioritize, and delete listener rules for the managed ALB. For maintenance overlays, missing `elasticloadbalancing:SetRulePriorities` commonly shows up as an AWS Load Balancer Controller `FailedDeployModel` event.
+
+Rule-management permissions needed by the AWS Load Balancer Controller include:
+
+- `elasticloadbalancing:CreateRule`
+- `elasticloadbalancing:DeleteRule`
+- `elasticloadbalancing:ModifyRule`
+- `elasticloadbalancing:SetRulePriorities`
+- `elasticloadbalancing:DescribeRules`
+- `elasticloadbalancing:DescribeListeners`
+
+After IAM policy changes, the maintenance operator does not need to restart. AWS IAM permissions apply to the AWS Load Balancer Controller role. If AWS Load Balancer Controller continues to log `AccessDenied` after the role is updated, restart the AWS Load Balancer Controller deployment so it refreshes credentials:
+
+```bash
+kubectl rollout restart deployment/aws-load-balancer-controller -n kube-system
+kubectl rollout status deployment/aws-load-balancer-controller -n kube-system
+```
+
+Restart the maintenance operator only when changing its deployment configuration, such as switching between cluster-scoped and namespace-scoped watch mode. Changing a `Maintenance` resource from `targetIngress` to `albGroupName`, or updating the `albGroupName` value, is reconciled automatically and does not require an operator restart.
 
 The operator supports two targeting modes. Choose one per `Maintenance` resource.
 
@@ -465,8 +490,23 @@ kubectl logs -n alb-maintenance-operator deploy/alb-maintenance
 - `TargetIngressNotFound`: with Ingress-name targeting, confirm the `Maintenance` resource is in the same namespace as the target Ingress.
 - `InvalidConfiguration` for missing group name: with Ingress-name targeting, add `alb.ingress.kubernetes.io/group.name` to the target Ingress.
 - Non-ALB target error: with Ingress-name targeting, set `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`.
+- `FailedDeployModel` or `AccessDenied` from AWS Load Balancer Controller: confirm the AWS Load Balancer Controller IAM role includes ALB listener rule permissions, especially `elasticloadbalancing:SetRulePriorities`.
 - Body limit error: ALB fixed-response message bodies are limited to 1024 bytes.
 - Generated Ingress does not take precedence: confirm both Ingresses are in the same ALB IngressGroup and the generated Ingress has `group.order: "-1000"`.
+- Generated Ingress exists but no ALB listener rule appears: inspect AWS Load Balancer Controller logs and events, then verify `CreateRule`, `ModifyRule`, `DeleteRule`, `DescribeRules`, `DescribeListeners`, and `SetRulePriorities` permissions on the controller IAM role.
+
+Inspect AWS Load Balancer Controller events and logs:
+
+```bash
+kubectl describe ingress <generated-maintenance-ingress-name> -n <application-namespace>
+kubectl logs -n kube-system deployment/aws-load-balancer-controller
+```
+
+Restart guidance:
+
+- Updating `spec.albGroupName`, `spec.targetIngress`, `spec.maintenanceMode`, or `spec.schedule` does not require restarting the maintenance operator.
+- Switching the operator deployment between global scoped and namespace scoped mode requires updating the deployment/RBAC and restarting or redeploying the operator.
+- Updating AWS IAM permissions belongs to AWS Load Balancer Controller. Restart AWS Load Balancer Controller only if it continues using stale credentials after the IAM role is fixed.
 
 ## Limitations
 

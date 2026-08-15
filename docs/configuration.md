@@ -17,6 +17,23 @@ This Kubernetes-native model keeps application routing ownership clean:
 - schedule, status, finalizer cleanup, and troubleshooting all remain visible through `kubectl`;
 - generated maintenance resources can be managed through normal RBAC, audit, and GitOps controls.
 
+## AWS Load Balancer Controller IAM
+
+AWS ALB listener rule permissions belong to the AWS Load Balancer Controller role or service account, not to the app-maintenance-operator service account. The maintenance operator creates Kubernetes `Ingress` resources; AWS Load Balancer Controller watches those resources and calls the AWS Elastic Load Balancing API.
+
+Use the official AWS Load Balancer Controller IAM policy for your installed controller version. For maintenance overlays, the controller role must be able to create, modify, reprioritize, describe, and delete ALB listener rules. Missing `elasticloadbalancing:SetRulePriorities` is a common cause of `FailedDeployModel` events when the generated maintenance Ingress is present but the ALB listener rule is not applied.
+
+Relevant ALB rule-management actions include:
+
+- `elasticloadbalancing:CreateRule`
+- `elasticloadbalancing:DeleteRule`
+- `elasticloadbalancing:ModifyRule`
+- `elasticloadbalancing:SetRulePriorities`
+- `elasticloadbalancing:DescribeRules`
+- `elasticloadbalancing:DescribeListeners`
+
+Changing IAM permissions does not require restarting the maintenance operator. If AWS Load Balancer Controller continues to report `AccessDenied` after updating its IAM role, restart the AWS Load Balancer Controller deployment so it refreshes credentials.
+
 ## Maintenance Spec
 
 `spec.targetIngress`
