@@ -1,5 +1,9 @@
 # Testing
 
+`app-maintenance-operator` is an ALB maintenance operator for Kubernetes. It creates AWS Load Balancer Controller-compatible maintenance overlays for ALB IngressGroups without mutating the original application Ingress.
+
+Start with the [project README](../README.md) for installation and usage, or open the [GitHub Pages documentation](https://k8s-operators-devops.github.io/app-maintenance-operator/) for the public landing page.
+
 ## Local Validation Without a Cluster
 
 These commands validate source code, controller behavior, generated code, and bundle packaging without requiring access to a Kubernetes cluster:
@@ -58,7 +62,7 @@ Confirm the generated maintenance Ingress:
 - exists separately from the application Ingress;
 - has `alb.ingress.kubernetes.io/group.order: "-1000"`;
 - has `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`;
-- uses `maintenance/use-annotation` for every backend.
+- has one catch-all `/*` path that uses `maintenance/use-annotation`.
 
 Confirm at least one application Ingress declares the ALB IngressGroup:
 

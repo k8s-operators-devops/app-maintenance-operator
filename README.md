@@ -13,30 +13,88 @@ It is focused on application traffic maintenance, not node maintenance. The oper
 
 End users install and operate it with `kubectl` only. Go, Kubebuilder, controller-gen, Kustomize, and Make are maintainer tools, not runtime requirements.
 
-The operator never mutates the original application Ingress during normal enable or disable. It creates a separate maintenance Ingress in the same ALB IngressGroup and gives it higher precedence with `alb.ingress.kubernetes.io/group.order: "-1000"`.
+The operator never mutates the original application Ingress during normal enable or disable. It creates a separate maintenance Ingress in the same ALB IngressGroup and gives it higher precedence with `alb.ingress.kubernetes.io/group.order: "-1000"`. AWS Load Balancer Controller then reconciles that generated Ingress into a higher-priority ALB listener rule that serves the fixed maintenance response.
+
+> **Purpose:** Route AWS ALB Ingress traffic to a maintenance response with a high-priority ALB listener rule while preserving existing application Ingress routing, redirects, and backend rules.
+
+## Problem It Solves
+
+Maintenance windows for ALB-backed Kubernetes applications are often handled by manually editing application Ingress objects, changing ALB listener rules in AWS, or adding temporary redirect/fixed-response actions under pressure. That creates operational risk:
+
+- application-owned Ingress routing can be accidentally changed or overwritten;
+- ALB redirect rules and backend rules can drift from the desired Kubernetes state;
+- rollback depends on manual memory, screenshots, or out-of-band backups;
+- scheduled windows are hard to express through GitOps or normal Kubernetes workflows;
+- multiple application teams sharing one ALB IngressGroup can step on each other's routing changes.
+
+`app-maintenance-operator` moves that workflow into a declarative Kubernetes API. Users create a `Maintenance` custom resource, and the controller reconciles a temporary overlay Ingress that AWS Load Balancer Controller converts into the maintenance listener rule.
+
+## Why Kubernetes Native
+
+- **Declarative operations:** maintenance intent is stored in a Kubernetes custom resource instead of an ad hoc console change.
+- **Reconciliation:** the controller continuously drives the generated maintenance Ingress toward the requested state.
+- **Separation of ownership:** application Ingresses remain owned by application teams; maintenance routing is owned by the operator.
+- **GitOps alignment:** maintenance windows can be reviewed, applied, audited, and reverted through normal Kubernetes delivery workflows.
+- **Scheduled automation:** `spec.schedule` defines the start and end of a maintenance window without a manual late-night toggle.
+- **Safer rollback:** disabling maintenance removes the generated overlay and returns traffic to existing ALB listener rules.
 
 ## Prerequisites
 
 - Kubernetes v1.25 or newer.
 - AWS Load Balancer Controller installed.
-- An existing AWS Load Balancer Controller ALB IngressGroup.
-- Existing application Ingresses in that group must use one of:
-  - `spec.ingressClassName: alb`
-  - `kubernetes.io/ingress.class: alb`
-- Existing application Ingresses must define an ALB IngressGroup ID/name with `alb.ingress.kubernetes.io/group.name`.
 - `kubectl` access to the target cluster.
 - A `kubectl` client that is within one minor version of the cluster control plane.
+- At least one existing ALB-backed application Ingress that is already working through AWS Load Balancer Controller.
 
 Start in a non-production namespace first. IngressGroup is powerful: any user who can create or update Ingresses in the same ALB IngressGroup can affect routing for that group.
 
-Verify the ALB IngressGroup name before enabling maintenance:
+The operator supports two targeting modes. Choose one per `Maintenance` resource.
+
+| User preference | Use this field | Best fit |
+| --- | --- | --- |
+| "Put this whole ALB IngressGroup into maintenance." | `spec.albGroupName` | Recommended for AWS Load Balancer Controller users who know the shared IngressGroup name. |
+| "Put the ALB group used by this specific Ingress into maintenance." | `spec.targetIngress` | Useful when application teams know their Ingress name but not the ALB group name. |
+
+Do not set both fields in the same `Maintenance` resource.
+
+### Prerequisites for `albGroupName`
+
+Use `spec.albGroupName` when you want to target an existing AWS Load Balancer Controller IngressGroup directly.
+
+Required:
+
+- Application Ingresses must be in the same namespace as the `Maintenance` resource.
+- At least one Ingress in that namespace must have:
+  - `spec.ingressClassName: alb`, or
+  - `kubernetes.io/ingress.class: alb`
+- The Ingresses must define the ALB group annotation:
+  - `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`
+- If HTTPS or custom listeners are used, the existing group member Ingress should define:
+  - `alb.ingress.kubernetes.io/listen-ports`
+
+Verify the group name before enabling maintenance:
 
 ```bash
 kubectl get ingress -n <application-namespace> \
   -o custom-columns=NAME:.metadata.name,GROUP:.metadata.annotations.alb\.ingress\.kubernetes\.io/group\.name,LISTEN_PORTS:.metadata.annotations.alb\.ingress\.kubernetes\.io/listen-ports
 ```
 
-Use the value in the `GROUP` column as `spec.albGroupName`. Create the `Maintenance` resource in the same namespace as the IngressGroup member Ingresses so the operator can discover the group's listener ports.
+Use the value in the `GROUP` column as `spec.albGroupName`.
+
+### Prerequisites for `targetIngress`
+
+Use `spec.targetIngress` when you want to point at one existing ALB Ingress by name. The operator reads that Ingress for ALB metadata, discovers its group name and listener ports, and creates one separate high-priority catch-all maintenance Ingress for that ALB group.
+
+Required:
+
+- The target Ingress must be in the same namespace as the `Maintenance` resource.
+- The target Ingress must be ALB-managed through:
+  - `spec.ingressClassName: alb`, or
+  - `kubernetes.io/ingress.class: alb`
+- The target Ingress must define:
+  - `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`
+- If HTTPS or custom listeners are used, the target Ingress should define:
+  - `alb.ingress.kubernetes.io/listen-ports`
 
 Inspect one group member when you need the full annotation set:
 
@@ -46,7 +104,7 @@ kubectl describe ingress <ingress-name> -n <application-namespace>
 
 Confirm the annotations include `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`.
 
-For AWS Load Balancer Controller users, `spec.albGroupName` is the recommended targeting mode. The operator discovers existing Ingresses in the same namespace with that group name and applies the maintenance overlay to the listener ports used by that group, including HTTPS listeners declared through `alb.ingress.kubernetes.io/listen-ports`.
+For AWS Load Balancer Controller users, `spec.albGroupName` is the clearest platform-team interface. `spec.targetIngress` is also supported for teams that prefer to identify the application by Ingress name. Both modes leave the original application Ingress unchanged.
 
 ## Installation
 
@@ -121,8 +179,8 @@ helm install app-maintenance-operator <chart> \
   --set maintenance.namespace=<application-namespace> \
   --set maintenance.albGroupName=<alb-ingress-group-name> \
   --set maintenance.maintenanceMode=true \
-  --set-string maintenance.schedule.start="<start-time-rfc3339>" \
-  --set-string maintenance.schedule.end="<end-time-rfc3339>"
+  --set-string maintenance.schedule.start="<YYYY-MM-DDTHH:MM:SSZ-or-offset>" \
+  --set-string maintenance.schedule.end="<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
 ```
 
 Planned namespace scoped Helm install with a scheduled `Maintenance` resource:
@@ -136,8 +194,8 @@ helm install app-maintenance-operator <chart> \
   --set maintenance.name=<maintenance-name> \
   --set maintenance.albGroupName=<alb-ingress-group-name> \
   --set maintenance.maintenanceMode=true \
-  --set-string maintenance.schedule.start="<start-time-rfc3339>" \
-  --set-string maintenance.schedule.end="<end-time-rfc3339>"
+  --set-string maintenance.schedule.start="<YYYY-MM-DDTHH:MM:SSZ-or-offset>" \
+  --set-string maintenance.schedule.end="<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
 ```
 
 Set `maintenance.albGroupName` to the existing ALB IngressGroup name. Schedule values must be RFC3339 timestamps, using `YYYY-MM-DDTHH:MM:SSZ` for UTC or `YYYY-MM-DDTHH:MM:SS-04:00` with an explicit offset.
@@ -160,24 +218,28 @@ kubectl logs -n alb-maintenance-operator \
   -c manager
 ```
 
-## Enable Maintenance
+## Create Maintenance
 
-Choose one supported targeting option:
+Create one `Maintenance` resource in the application namespace. Pick exactly one targeting mode:
 
-- ALB IngressGroup name with `spec.albGroupName`, recommended for AWS Load Balancer Controller groups.
-- Ingress name with `spec.targetIngress`, supported when you want to target one existing ALB Ingress directly.
+- `albGroupName`: target an existing AWS Load Balancer Controller IngressGroup by group name.
+- `targetIngress`: target one existing ALB Ingress by name; the operator reads its ALB group and listener metadata.
 
-For ALB IngressGroup targeting, edit `samples/maintenance-enable.yaml` before applying it:
+Both modes create a separate maintenance Ingress with one high-priority catch-all `/*` rule. AWS Load Balancer Controller turns that generated Ingress into an ALB listener rule for the same IngressGroup. The original application Ingress is not modified.
 
-- replace `<maintenance-name>` with the name for the `Maintenance` resource;
-- replace `<application-namespace>` with the namespace where the ALB IngressGroup member Ingresses live;
-- replace `<alb-ingress-group-name>` with the existing ALB IngressGroup name.
+> **Operational model:** The operator changes maintenance routing by creating a managed overlay Ingress. It does not rewrite existing application paths, redirect actions, or backend service rules.
 
-```bash
-kubectl apply -f samples/maintenance-enable.yaml
-```
+### Option A: ALB IngressGroup Name
 
-Example:
+Use this when you know the ALB group name and want the clearest AWS Load Balancer Controller workflow.
+
+Required before applying:
+
+- Replace `<maintenance-name>` with a name for this maintenance window.
+- Replace `<application-namespace>` with the namespace that contains the ALB group member Ingresses.
+- Replace `<alb-ingress-group-name>` with the value from `alb.ingress.kubernetes.io/group.name`.
+
+Enable maintenance immediately:
 
 ```yaml
 apiVersion: k8smaintenance.io/v1alpha1
@@ -193,7 +255,50 @@ spec:
     html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
 ```
 
-For Ingress-name targeting, use `samples/maintenance-enable-ingress.yaml`:
+Equivalent sample file:
+
+```bash
+kubectl apply -f samples/maintenance-enable.yaml
+```
+
+Schedule maintenance for an ALB IngressGroup:
+
+```yaml
+apiVersion: k8smaintenance.io/v1alpha1
+kind: Maintenance
+metadata:
+  name: <maintenance-name>
+  namespace: <application-namespace>
+spec:
+  albGroupName: <alb-ingress-group-name>
+  maintenanceMode: true
+  schedule:
+    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00.
+    start: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
+    end: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
+  response:
+    backend: fixed-response
+    html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
+```
+
+Equivalent sample file:
+
+```bash
+kubectl apply -f samples/maintenance-scheduled.yaml
+```
+
+### Option B: Target Ingress Name
+
+Use this when the application team knows the Ingress name and wants the operator to derive the ALB group from that Ingress.
+
+Required before applying:
+
+- Replace `<maintenance-name>` with a name for this maintenance window.
+- Replace `<application-namespace>` with the namespace that contains the target Ingress.
+- Replace `<target-ingress-name>` with the existing ALB Ingress name.
+- Confirm the target Ingress has `alb.ingress.kubernetes.io/group.name`.
+
+Enable maintenance immediately:
 
 ```yaml
 apiVersion: k8smaintenance.io/v1alpha1
@@ -208,6 +313,50 @@ spec:
     backend: fixed-response
     html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
 ```
+
+Equivalent sample file:
+
+```bash
+kubectl apply -f samples/maintenance-enable-ingress.yaml
+```
+
+Schedule maintenance for a target Ingress:
+
+```yaml
+apiVersion: k8smaintenance.io/v1alpha1
+kind: Maintenance
+metadata:
+  name: <maintenance-name>
+  namespace: <application-namespace>
+spec:
+  targetIngress: <target-ingress-name>
+  maintenanceMode: true
+  schedule:
+    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00.
+    start: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
+    end: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
+  response:
+    backend: fixed-response
+    html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
+```
+
+Equivalent sample file:
+
+```bash
+kubectl apply -f samples/maintenance-scheduled-ingress.yaml
+```
+
+### Schedule Behavior
+
+Set `spec.maintenanceMode: true` and use `spec.schedule.start` and `spec.schedule.end` to let the controller enable and disable maintenance mode automatically. Timestamps must be RFC3339 values. Use `YYYY-MM-DDTHH:MM:SSZ` for UTC, or include an explicit offset such as `YYYY-MM-DDTHH:MM:SS-04:00`.
+
+Behavior:
+
+- before `start`, the resource stays `Pending` and the generated maintenance Ingress is absent;
+- from `start` until `end`, maintenance mode is enabled;
+- at or after `end`, maintenance mode is disabled and generated resources are removed;
+- `spec.maintenanceMode: false` or an omitted `spec.maintenanceMode` disables maintenance and ignores the schedule;
+- `end` must be after `start`; invalid windows are reported with `InvalidSchedule`.
 
 ## Check Status
 
@@ -237,6 +386,7 @@ Confirm the generated maintenance Ingress:
 - has `alb.ingress.kubernetes.io/listen-ports` matching the discovered listener ports for the ALB group;
 - uses backend service `maintenance` with port name `use-annotation`;
 - contains `alb.ingress.kubernetes.io/actions.maintenance`;
+- causes AWS Load Balancer Controller to create or update a higher-priority ALB listener rule for the maintenance fixed response;
 - does not modify the original Ingress labels, annotations, or spec.
 
 Endpoint check:
@@ -277,59 +427,34 @@ kubectl patch maintenance <maintenance-name> \
 
 The generated maintenance Ingress should be removed. Normal application routing resumes through the unchanged application Ingresses.
 
-## Schedule Maintenance
-
-Set `spec.maintenanceMode: true` and use `spec.schedule.start` and `spec.schedule.end` to let the controller enable and disable maintenance mode automatically. Timestamps must be RFC3339 values. Choose the timezone that matches your change window by using either `Z` for UTC or an explicit offset such as `-04:00` or `+05:30`.
-
-```yaml
-apiVersion: k8smaintenance.io/v1alpha1
-kind: Maintenance
-metadata:
-  name: <maintenance-name>
-  namespace: <application-namespace>
-spec:
-  albGroupName: <alb-ingress-group-name>
-  maintenanceMode: true
-  schedule:
-    start: "2026-07-20T22:00:00Z"
-    end: "2026-07-20T23:00:00Z"
-  response:
-    backend: fixed-response
-    html: '<html><head><title>Scheduled Maintenance</title><style>body{margin:0;font-family:Arial,sans-serif;background:#f6f8fb;color:#172033;display:flex;align-items:center;justify-content:center;height:100vh}.box{max-width:560px;padding:32px;text-align:center}h1{font-size:28px;margin:0 0 12px}p{font-size:16px;line-height:1.5;color:#5d6678;margin:0 0 14px}.code{font-size:13px;color:#7a4b00}</style></head><body><div class="box"><h1>Scheduled Maintenance</h1><p>We are performing planned maintenance and will be back shortly.</p><p>Thank you for your patience.</p><p class="code">HTTP 503 Service Unavailable</p></div></body></html>'
-```
-
-Apply the scheduled sample:
-
-```bash
-kubectl apply -f samples/maintenance-scheduled.yaml
-```
-
-For Ingress-name targeting:
-
-```bash
-kubectl apply -f samples/maintenance-scheduled-ingress.yaml
-```
-
-Behavior:
-
-- before `start`, the resource stays `Pending` and the generated maintenance Ingress is absent;
-- from `start` until `end`, maintenance mode is enabled;
-- at or after `end`, maintenance mode is disabled and generated resources are removed;
-- `spec.maintenanceMode: false` or an omitted `spec.maintenanceMode` disables maintenance and ignores the schedule.
-- `end` must be after `start`; invalid windows are reported with `InvalidSchedule`.
-
-Example with an explicit local timezone offset:
-
-```yaml
-schedule:
-  start: "2026-07-20T18:00:00-04:00"
-  end: "2026-07-20T19:00:00-04:00"
-```
-
 ## Uninstall
 
+Delete `Maintenance` resources before removing the operator. This gives the controller a chance to run its finalizer cleanup, delete generated maintenance Ingresses, and remove backup ConfigMaps while the operator is still running.
+
+For a global scoped install:
+
 ```bash
-kubectl delete -f deploy/install.yaml
+kubectl get maintenance -A
+kubectl delete maintenance --all -A
+kubectl get maintenance -A
+kubectl delete -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.2.1/deploy/install.yaml
+```
+
+For a namespace scoped install, delete `Maintenance` resources from the namespace watched by that operator instance:
+
+```bash
+kubectl get maintenance -n <application-namespace>
+kubectl delete maintenance --all -n <application-namespace>
+kubectl get maintenance -n <application-namespace>
+kubectl delete -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.1
+```
+
+Wait until `kubectl get maintenance` returns no resources before deleting the install manifest. If a `Maintenance` resource stays in `Terminating`, inspect the generated maintenance Ingress and operator logs before removing finalizers manually:
+
+```bash
+kubectl get ingress -n <application-namespace>
+kubectl describe ingress -n <application-namespace> <generated-maintenance-ingress-name>
+kubectl logs -n alb-maintenance-operator deploy/alb-maintenance
 ```
 
 ## Troubleshooting
@@ -340,7 +465,6 @@ kubectl delete -f deploy/install.yaml
 - `TargetIngressNotFound`: with Ingress-name targeting, confirm the `Maintenance` resource is in the same namespace as the target Ingress.
 - `InvalidConfiguration` for missing group name: with Ingress-name targeting, add `alb.ingress.kubernetes.io/group.name` to the target Ingress.
 - Non-ALB target error: with Ingress-name targeting, set `spec.ingressClassName: alb` or `kubernetes.io/ingress.class: alb`.
-- No HTTP paths/default backend error: with Ingress-name targeting, ensure the target Ingress has at least one HTTP path or a default backend.
 - Body limit error: ALB fixed-response message bodies are limited to 1024 bytes.
 - Generated Ingress does not take precedence: confirm both Ingresses are in the same ALB IngressGroup and the generated Ingress has `group.order: "-1000"`.
 
