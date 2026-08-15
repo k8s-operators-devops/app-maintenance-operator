@@ -778,18 +778,18 @@
         </div>
       </div>
 
-      <aside class="panel" aria-label="Pinned install command">
-        <h2>Install a pinned release</h2>
-        <p>Review the manifest, then apply a versioned release from GitHub.</p>
+      <aside class="panel" aria-label="Latest stable install command">
+        <h2>Install latest stable</h2>
+        <p>Review the manifest, then apply the latest stable release from GitHub.</p>
         <div class="code-panel">
           <span class="copy-status" data-status-for="install-snippet" role="status" aria-live="polite"></span>
-          <button class="copy-button" type="button" aria-label="Copy pinned install command" title="Copy sample" data-copy-target="install-snippet" data-copy-label="Copy pinned install command">
+          <button class="copy-button" type="button" aria-label="Copy latest stable install command" title="Copy sample" data-copy-target="install-snippet" data-copy-label="Copy latest stable install command">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <rect x="8" y="8" width="12" height="12" rx="2"></rect>
               <path d="M4 16V6a2 2 0 0 1 2-2h10"></path>
             </svg>
           </button>
-          <pre><code id="install-snippet">kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.2.1/deploy/install.yaml</code></pre>
+          <pre><code id="install-snippet">kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/latest/deploy/install.yaml</code></pre>
         </div>
       </aside>
     </section>
@@ -1043,7 +1043,7 @@
       <div class="status-strip">
         <div class="metric">
           <strong>Version</strong>
-          <span>v1.2.1</span>
+          <span>v1.2.2</span>
         </div>
         <div class="metric">
           <strong>Image</strong>

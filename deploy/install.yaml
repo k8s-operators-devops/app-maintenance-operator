@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
     control-plane: alb-maintenance
   name: alb-maintenance-operator
 ---
@@ -262,7 +262,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
   name: alb-maintenance
   namespace: alb-maintenance-operator
 ---
@@ -273,7 +273,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
   name: alb-maintenance-leader-election-role
   namespace: alb-maintenance-operator
 rules:
@@ -471,7 +471,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
   name: alb-maintenance-leader-election-rolebinding
   namespace: alb-maintenance-operator
 roleRef:
@@ -490,7 +490,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
   name: alb-maintenance-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -521,7 +521,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
     control-plane: alb-maintenance
   name: alb-maintenance-metrics
   namespace: alb-maintenance-operator
@@ -542,7 +542,7 @@ metadata:
     app.kubernetes.io/component: controller
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: app-maintenance-operator
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
     control-plane: alb-maintenance
   name: alb-maintenance
   namespace: alb-maintenance-operator
@@ -559,7 +559,7 @@ spec:
       labels:
         app.kubernetes.io/component: controller
         app.kubernetes.io/name: app-maintenance-operator
-        app.kubernetes.io/version: v1.2.1
+        app.kubernetes.io/version: v1.2.2
         control-plane: alb-maintenance
     spec:
       containers:
@@ -571,8 +571,8 @@ spec:
         - /manager
         env:
         - name: OPERATOR_VERSION
-          value: v1.2.1
-        image: ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.2.1
+          value: v1.2.2
+        image: ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.2.2
         livenessProbe:
           httpGet:
             path: /healthz

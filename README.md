@@ -140,10 +140,16 @@ Choose the install mode that matches your operating model:
 
 ### Global Scoped Install
 
-Use the pinned release manifest when one operator should reconcile maintenance across namespaces:
+Use the latest stable manifest when one operator should reconcile maintenance across namespaces:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.2.1/deploy/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/latest/deploy/install.yaml
+```
+
+For production change control, pin the immutable release tag:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.2.2/deploy/install.yaml
 ```
 
 Review the manifest first if you are installing from a local checkout:
@@ -159,7 +165,7 @@ The global scoped manifest includes the namespace, CRD, service account, manager
 Use the namespace-scoped profile when one operator instance should watch only its own namespace:
 
 ```bash
-kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.1
+kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.2
 ```
 
 This profile sets `WATCH_NAMESPACE` from the operator pod namespace and uses namespaced `Role` and `RoleBinding` resources for manager permissions. The `Maintenance` resource and generated maintenance Ingress must live in that same namespace.
@@ -169,7 +175,7 @@ CRDs remain cluster-scoped Kubernetes resources, so installing the API still req
 The controller image is published to GHCR and pinned in the release manifest:
 
 ```text
-ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.2.1
+ghcr.io/k8s-operators-devops/app-maintenance-operator:v1.2.2
 ```
 
 ### Planned Helm Install UX
@@ -456,13 +462,19 @@ The generated maintenance Ingress should be removed. Normal application routing 
 
 Delete `Maintenance` resources before removing the operator. This gives the controller a chance to run its finalizer cleanup, delete generated maintenance Ingresses, and remove backup ConfigMaps while the operator is still running.
 
-For a global scoped install:
+For a global scoped install, delete the same manifest ref you installed. If you used the latest stable ref:
 
 ```bash
 kubectl get maintenance -A
 kubectl delete maintenance --all -A
 kubectl get maintenance -A
-kubectl delete -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.2.1/deploy/install.yaml
+kubectl delete -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/latest/deploy/install.yaml
+```
+
+If you pinned the v1.2.2 release:
+
+```bash
+kubectl delete -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.2.2/deploy/install.yaml
 ```
 
 For a namespace scoped install, delete `Maintenance` resources from the namespace watched by that operator instance:
@@ -471,7 +483,7 @@ For a namespace scoped install, delete `Maintenance` resources from the namespac
 kubectl get maintenance -n <application-namespace>
 kubectl delete maintenance --all -n <application-namespace>
 kubectl get maintenance -n <application-namespace>
-kubectl delete -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.1
+kubectl delete -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.2
 ```
 
 Wait until `kubectl get maintenance` returns no resources before deleting the install manifest. If a `Maintenance` resource stays in `Terminating`, inspect the generated maintenance Ingress and operator logs before removing finalizers manually:
@@ -531,7 +543,7 @@ Release images are published by GitHub Actions to GHCR when a `v*` tag is pushed
 Before cutting a release tag, update pinned release references in one shot:
 
 ```bash
-make bump-release VERSION=v1.2.1
+make bump-release VERSION=v1.2.2
 ```
 
 Review `CHANGELOG.md`, merge the release-prep commit through the protected `main` branch, wait for required checks to pass on `main`, then create the immutable tag from that validated commit.

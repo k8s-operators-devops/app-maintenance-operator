@@ -8,6 +8,23 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 No unreleased changes.
 
+## [v1.2.2] - 2026-08-15
+
+### Changed
+
+- Updated latest stable install, pinned install, namespaced install, GitOps, docs-site, generated manifest, Kustomize, issue-template, and image-publish references for `v1.2.2`.
+- Improved GitHub Pages landing-page copy, structured metadata, copyable snippets, and architecture guidance for ALB maintenance routing.
+- Clarified RFC3339 schedule examples across README, configuration docs, samples, CRD schema, and the generated install manifest.
+
+### Security
+
+- Included the previously approved high-priority dependency/security update for `google.golang.org/grpc` and related Go module dependencies.
+
+### Fixed
+
+- Documented AWS Load Balancer Controller IAM permissions required for generated maintenance Ingress listener-rule reconciliation.
+- Clarified finalizer-safe uninstall behavior, troubleshooting, and cleanup expectations for operator removal.
+
 ## [v1.2.1] - 2026-08-14
 
 ### Changed

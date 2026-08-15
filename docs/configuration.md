@@ -187,7 +187,7 @@ The `config/namespaced` Kustomize profile runs the controller in its own namespa
 Pinned Kustomize install:
 
 ```bash
-kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.1
+kubectl apply -k https://github.com/k8s-operators-devops/app-maintenance-operator/config/namespaced?ref=v1.2.2
 ```
 
 With this profile, the operator watches only the namespace where it is installed. The `Maintenance` resource and generated maintenance Ingress must live in that same namespace. With Ingress-name targeting, the target Ingress and backup ConfigMap must also live there.

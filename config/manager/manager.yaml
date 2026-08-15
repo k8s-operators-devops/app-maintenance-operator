@@ -5,7 +5,7 @@ metadata:
     control-plane: alb-maintenance
     app.kubernetes.io/name: app-maintenance-operator
     app.kubernetes.io/component: controller
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
     app.kubernetes.io/managed-by: kustomize
   name: alb-maintenance-operator
 ---
@@ -18,7 +18,7 @@ metadata:
     control-plane: alb-maintenance
     app.kubernetes.io/name: app-maintenance-operator
     app.kubernetes.io/component: controller
-    app.kubernetes.io/version: v1.2.1
+    app.kubernetes.io/version: v1.2.2
     app.kubernetes.io/managed-by: kustomize
 spec:
   selector:
@@ -34,7 +34,7 @@ spec:
         control-plane: alb-maintenance
         app.kubernetes.io/name: app-maintenance-operator
         app.kubernetes.io/component: controller
-        app.kubernetes.io/version: v1.2.1
+        app.kubernetes.io/version: v1.2.2
     spec:
       # Optional node affinity can restrict scheduling to architectures published
       # by the release image. The published image supports linux/amd64 and
@@ -73,7 +73,7 @@ spec:
         name: manager
         env:
         - name: OPERATOR_VERSION
-          value: v1.2.1
+          value: v1.2.2
         ports:
         - containerPort: 8081
           name: health
