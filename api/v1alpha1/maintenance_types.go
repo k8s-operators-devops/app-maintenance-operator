@@ -109,11 +109,13 @@ type MaintenanceResponse struct {
 // MaintenanceSchedule defines the maintenance window.
 type MaintenanceSchedule struct {
 
-	// Maintenance start time (RFC3339).
+	// Maintenance start time (RFC3339), for example 2026-09-01T22:00:00Z
+	// or 2026-09-01T18:00:00-04:00 for an ET offset.
 	// +optional
 	Start *metav1.Time `json:"start,omitempty"`
 
-	// Maintenance end time (RFC3339).
+	// Maintenance end time (RFC3339), for example 2026-09-01T23:00:00Z
+	// or 2026-09-01T19:00:00-04:00 for an ET offset.
 	// +optional
 	End *metav1.Time `json:"end,omitempty"`
 }

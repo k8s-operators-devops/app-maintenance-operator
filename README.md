@@ -223,7 +223,7 @@ helm install app-maintenance-operator <chart> \
   --set-string maintenance.schedule.end="<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
 ```
 
-Set `maintenance.albGroupName` to the existing ALB IngressGroup name. Schedule values must be RFC3339 timestamps, using `YYYY-MM-DDTHH:MM:SSZ` for UTC or `YYYY-MM-DDTHH:MM:SS-04:00` with an explicit offset.
+Set `maintenance.albGroupName` to the existing ALB IngressGroup name. Schedule values must be RFC3339 timestamps, for example `2026-09-01T22:00:00Z` for UTC or `2026-09-01T18:00:00-04:00` for an ET offset.
 
 Do not put watch scope in the `Maintenance` spec. Watch scope is deployment and RBAC configuration; maintenance intent belongs in the `Maintenance` resource. See [Configuration](docs/configuration.md) for the security boundaries of namespace-scoped operation.
 
@@ -298,7 +298,7 @@ spec:
   albGroupName: <alb-ingress-group-name>
   maintenanceMode: true
   schedule:
-    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00.
+    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00 (ET offset).
     start: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
     end: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
   response:
@@ -357,7 +357,7 @@ spec:
   targetIngress: <target-ingress-name>
   maintenanceMode: true
   schedule:
-    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00.
+    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00 (ET offset).
     start: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
     end: "<YYYY-MM-DDTHH:MM:SSZ-or-offset>"
   response:
@@ -373,7 +373,7 @@ kubectl apply -f samples/maintenance-scheduled-ingress.yaml
 
 ### Schedule Behavior
 
-Set `spec.maintenanceMode: true` and use `spec.schedule.start` and `spec.schedule.end` to let the controller enable and disable maintenance mode automatically. Timestamps must be RFC3339 values. Use `YYYY-MM-DDTHH:MM:SSZ` for UTC, or include an explicit offset such as `YYYY-MM-DDTHH:MM:SS-04:00`.
+Set `spec.maintenanceMode: true` and use `spec.schedule.start` and `spec.schedule.end` to let the controller enable and disable maintenance mode automatically. Timestamps must be RFC3339 values, for example `2026-09-01T22:00:00Z` for UTC or `2026-09-01T18:00:00-04:00` for an ET offset.
 
 Behavior:
 

@@ -109,7 +109,7 @@ For ALB IngressGroup targeting, the generated maintenance Ingress should be gone
 
 ## Schedule Maintenance
 
-Update `samples/maintenance-scheduled.yaml` so `<maintenance-name>`, `<application-namespace>`, `<alb-ingress-group-name>`, `spec.maintenanceMode`, `spec.schedule.start`, and `spec.schedule.end` match a non-production ALB IngressGroup and maintenance window. Use `Z` for UTC or an explicit RFC3339 offset such as `-04:00` or `+05:30` for the timezone your change window uses.
+Update `samples/maintenance-scheduled.yaml` so `<maintenance-name>`, `<application-namespace>`, `<alb-ingress-group-name>`, `spec.maintenanceMode`, `spec.schedule.start`, and `spec.schedule.end` match a non-production ALB IngressGroup and maintenance window. Use RFC3339 timestamps such as `2026-09-01T22:00:00Z` for UTC or `2026-09-01T18:00:00-04:00` for an ET offset.
 
 ```sh
 kubectl apply -f samples/maintenance-scheduled.yaml

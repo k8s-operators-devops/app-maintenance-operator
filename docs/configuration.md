@@ -86,7 +86,7 @@ Reserved API field from earlier designs. The controller always uses `alb.ingress
 
 Optional maintenance window. `start` and `end` are RFC3339 timestamps. The controller enables maintenance inside the window and disables it outside the window only when `spec.maintenanceMode: true`. `start` or `end` may be omitted for open-ended schedules.
 
-End users choose the timezone by writing the timestamp with either `Z` for UTC or an explicit offset such as `-04:00` or `+05:30`.
+Format reference: `2026-09-01T22:00:00Z` for UTC, or `2026-09-01T18:00:00-04:00` for an ET offset. End users choose the timezone by writing the timestamp with either `Z` for UTC or an explicit offset such as `-04:00` or `+05:30`.
 
 When both fields are set, `end` must be after `start`. Invalid windows are rejected with `status.phase: Failed` and reason `InvalidSchedule`.
 
@@ -97,6 +97,7 @@ spec:
   albGroupName: <alb-ingress-group-name>
   maintenanceMode: true
   schedule:
+    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00 (ET offset).
     start: "2026-07-20T22:00:00Z"
     end: "2026-07-20T23:00:00Z"
 ```
@@ -108,6 +109,7 @@ spec:
   albGroupName: <alb-ingress-group-name>
   maintenanceMode: true
   schedule:
+    # RFC3339 format. Examples: 2026-09-01T22:00:00Z or 2026-09-01T18:00:00-04:00 (ET offset).
     start: "2026-07-20T18:00:00-04:00"
     end: "2026-07-20T19:00:00-04:00"
 ```

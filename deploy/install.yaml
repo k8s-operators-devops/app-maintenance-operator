@@ -132,11 +132,15 @@ spec:
                   start/end window and disabled outside it.
                 properties:
                   end:
-                    description: Maintenance end time (RFC3339).
+                    description: |-
+                      Maintenance end time (RFC3339), for example 2026-09-01T23:00:00Z
+                      or 2026-09-01T19:00:00-04:00 for an ET offset.
                     format: date-time
                     type: string
                   start:
-                    description: Maintenance start time (RFC3339).
+                    description: |-
+                      Maintenance start time (RFC3339), for example 2026-09-01T22:00:00Z
+                      or 2026-09-01T18:00:00-04:00 for an ET offset.
                     format: date-time
                     type: string
                 type: object
