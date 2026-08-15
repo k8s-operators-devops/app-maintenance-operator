@@ -177,7 +177,7 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 			Paths: []networkingv1.HTTPIngressPath{{
 				Path:     "/case-auth",
 				PathType: &pathType,
-				Backend:  networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{Name: "domain-redirect", Port: networkingv1.ServiceBackendPort{Name: "use-annotation"}}},
+				Backend:  networkingv1.IngressBackend{Service: &networkingv1.IngressServiceBackend{Name: "domain-redirect", Port: networkingv1.ServiceBackendPort{Name: maintenanceBackendPort}}},
 			}},
 		}},
 	})
@@ -871,7 +871,7 @@ func assertAllHTTPBackends(t testFatalHelper, ingress *networkingv1.Ingress) {
 			continue
 		}
 		for _, path := range rule.HTTP.Paths {
-			if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != "use-annotation" {
+			if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != maintenanceBackendPort {
 				t.Fatalf("unexpected backend: %#v", path.Backend)
 			}
 		}
@@ -890,7 +890,7 @@ func assertSingleCatchAllMaintenanceRule(t testFatalHelper, ingress *networkingv
 	if path.Path != "/*" || path.PathType == nil || *path.PathType != networkingv1.PathTypeImplementationSpecific {
 		t.Fatalf("expected /* ImplementationSpecific path, got %#v", path)
 	}
-	if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != "use-annotation" {
+	if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != maintenanceBackendPort {
 		t.Fatalf("unexpected maintenance backend: %#v", path.Backend)
 	}
 }

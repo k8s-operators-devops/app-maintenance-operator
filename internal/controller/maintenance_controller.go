@@ -59,6 +59,7 @@ const (
 	defaultHTTPSListenPorts = `[{"HTTPS":443}]`
 	fixedResponseBackend    = "fixed-response"
 	ingressBackupDataKey    = "ingress.json"
+	maintenanceBackendPort  = "use-annotation"
 )
 
 var targetGroupOnlyAnnotations = []string{
@@ -690,7 +691,7 @@ func maintenanceBackend() *networkingv1.IngressBackend {
 	return &networkingv1.IngressBackend{
 		Service: &networkingv1.IngressServiceBackend{
 			Name: maintenanceActionName,
-			Port: networkingv1.ServiceBackendPort{Name: "use-annotation"},
+			Port: networkingv1.ServiceBackendPort{Name: maintenanceBackendPort},
 		},
 	}
 }
