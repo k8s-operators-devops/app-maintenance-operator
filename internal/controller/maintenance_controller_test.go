@@ -41,6 +41,8 @@ const (
 	testActionJSON     = "action-json"
 	testDriftedValue   = "drifted"
 	testHTTPHTTPSPorts = `[{"HTTP":80},{"HTTPS":443}]`
+	testAppHost        = "app.example.com"
+	testAPIHost        = "api.example.com"
 )
 
 func TestBuildALBActionJSON(t *testing.T) {
@@ -186,7 +188,7 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 	maintenance.UID = types.UID(testMaintenanceUID)
 	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(target, maintenance).Build(), Scheme: scheme}
 
-	generated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, testActionJSON)
+	generated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, nil, testActionJSON)
 	if err != nil {
 		t.Fatalf("ensureMaintenanceIngress returned error: %v", err)
 	}
@@ -214,7 +216,7 @@ func TestEnsureMaintenanceIngress(t *testing.T) {
 	if err := reconciler.Update(ctx, generated); err != nil {
 		t.Fatalf("failed to drift generated ingress: %v", err)
 	}
-	updated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, testActionJSON)
+	updated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, nil, testActionJSON)
 	if err != nil {
 		t.Fatalf("ensureMaintenanceIngress returned error on update: %v", err)
 	}
@@ -235,7 +237,7 @@ func TestEnsureGroupMaintenanceIngress(t *testing.T) {
 	maintenance.UID = types.UID(testMaintenanceUID)
 	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(maintenance).Build(), Scheme: scheme}
 
-	generated, err := reconciler.ensureGroupMaintenanceIngress(ctx, maintenance, testALBGroupName, testHTTPHTTPSPorts, testActionJSON)
+	generated, err := reconciler.ensureGroupMaintenanceIngress(ctx, maintenance, testALBGroupName, testHTTPHTTPSPorts, nil, testActionJSON)
 	if err != nil {
 		t.Fatalf("ensureGroupMaintenanceIngress returned error: %v", err)
 	}
@@ -269,7 +271,7 @@ func TestEnsureGroupMaintenanceIngress(t *testing.T) {
 	if err := reconciler.Update(ctx, generated); err != nil {
 		t.Fatalf("failed to drift generated ingress: %v", err)
 	}
-	updated, err := reconciler.ensureGroupMaintenanceIngress(ctx, maintenance, testALBGroupName, testHTTPHTTPSPorts, testActionJSON)
+	updated, err := reconciler.ensureGroupMaintenanceIngress(ctx, maintenance, testALBGroupName, testHTTPHTTPSPorts, nil, testActionJSON)
 	if err != nil {
 		t.Fatalf("ensureGroupMaintenanceIngress returned error on update: %v", err)
 	}
@@ -277,6 +279,76 @@ func TestEnsureGroupMaintenanceIngress(t *testing.T) {
 		t.Fatalf("expected drifted action to be repaired")
 	}
 	assertAllHTTPBackends(t, updated)
+}
+
+func TestEnsureMaintenanceIngressUsesConfiguredHosts(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	target := newTargetIngress(testTargetIngress, testNamespace)
+	maintenance := newMaintenance("maint", target.Name)
+	maintenance.UID = types.UID(testMaintenanceUID)
+	maintenance.Spec.Hosts = []string{testAppHost, testAPIHost}
+	hosts, err := maintenanceRuleHosts(maintenance.Spec.Hosts)
+	if err != nil {
+		t.Fatalf("maintenanceRuleHosts returned error: %v", err)
+	}
+
+	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(target, maintenance).Build(), Scheme: scheme}
+	generated, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, hosts, testActionJSON)
+	if err != nil {
+		t.Fatalf("ensureMaintenanceIngress returned error: %v", err)
+	}
+	assertHostSpecificMaintenanceRules(t, generated, hosts)
+}
+
+func TestEnsureGroupMaintenanceIngressUsesConfiguredHosts(t *testing.T) {
+	ctx := context.Background()
+	scheme := testScheme(t)
+	maintenance := newGroupMaintenance("maint", testALBGroupName)
+	maintenance.UID = types.UID(testMaintenanceUID)
+	maintenance.Spec.Hosts = []string{testAppHost, testAPIHost}
+	hosts, err := maintenanceRuleHosts(maintenance.Spec.Hosts)
+	if err != nil {
+		t.Fatalf("maintenanceRuleHosts returned error: %v", err)
+	}
+
+	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(maintenance).Build(), Scheme: scheme}
+	generated, err := reconciler.ensureGroupMaintenanceIngress(ctx, maintenance, testALBGroupName, testHTTPHTTPSPorts, hosts, testActionJSON)
+	if err != nil {
+		t.Fatalf("ensureGroupMaintenanceIngress returned error: %v", err)
+	}
+	assertHostSpecificMaintenanceRules(t, generated, hosts)
+}
+
+func TestMaintenanceRuleHosts(t *testing.T) {
+	tests := []struct {
+		name    string
+		hosts   []string
+		want    []string
+		wantErr string
+	}{
+		{name: "no configured hosts"},
+		{name: "trims and de-duplicates", hosts: []string{" " + testAppHost + " ", testAPIHost, testAppHost}, want: []string{testAppHost, testAPIHost}},
+		{name: "empty host rejected", hosts: []string{testAppHost, "  "}, wantErr: "hosts cannot contain an empty hostname"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := maintenanceRuleHosts(tt.hosts)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("expected error %q, got %v", tt.wantErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("maintenanceRuleHosts returned error: %v", err)
+			}
+			if !jsonEqual(got, tt.want) {
+				t.Fatalf("expected hosts %#v, got %#v", tt.want, got)
+			}
+		})
+	}
 }
 
 func TestResolveGroupListenPorts(t *testing.T) {
@@ -350,7 +422,7 @@ func TestEnsureMaintenanceIngressRejectsInvalidTargets(t *testing.T) {
 			current := target.DeepCopy()
 			tt.mutate(current)
 			reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(maintenance).Build(), Scheme: scheme}
-			if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, current, testActionJSON); err == nil {
+			if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, current, nil, testActionJSON); err == nil {
 				t.Fatalf("expected error")
 			}
 		})
@@ -405,7 +477,7 @@ func TestEnsureMaintenanceIngressRejectsExistingIngressWithAnotherOwner(t *testi
 	}
 	reconciler := &MaintenanceReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build(), Scheme: scheme}
 
-	if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, testActionJSON); err == nil {
+	if _, err := reconciler.ensureMaintenanceIngress(ctx, maintenance, target, nil, testActionJSON); err == nil {
 		t.Fatalf("expected ownership conflict")
 	}
 }
@@ -469,17 +541,17 @@ func TestSetMaintenanceStatusTransitionTime(t *testing.T) {
 	maintenance.Generation = 7
 
 	setMaintenanceStatus(maintenance, "Enabled", "Maintenance mode enabled", metav1.ConditionTrue, "MaintenanceEnabled")
-	first := maintenance.Status.LastTransitionTime
-	if first == nil {
+	if maintenance.Status.LastTransitionTime == nil {
 		t.Fatalf("expected transition time")
 	}
+	first := *maintenance.Status.LastTransitionTime
 	condition := metaFindReady(maintenance)
 	if condition == nil || condition.ObservedGeneration != 7 {
 		t.Fatalf("expected observed generation 7, got %#v", condition)
 	}
 
 	setMaintenanceStatus(maintenance, "Enabled", "Maintenance mode enabled", metav1.ConditionTrue, "MaintenanceEnabled")
-	if !maintenance.Status.LastTransitionTime.Equal(first) {
+	if !maintenance.Status.LastTransitionTime.Equal(&first) {
 		t.Fatalf("expected identical status not to change transition time")
 	}
 
@@ -892,6 +964,29 @@ func assertSingleCatchAllMaintenanceRule(t testFatalHelper, ingress *networkingv
 	}
 	if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != maintenanceBackendPort {
 		t.Fatalf("unexpected maintenance backend: %#v", path.Backend)
+	}
+}
+
+func assertHostSpecificMaintenanceRules(t testFatalHelper, ingress *networkingv1.Ingress, expectedHosts []string) {
+	t.Helper()
+	if ingress.Spec.DefaultBackend != nil {
+		t.Fatalf("expected no default backend, got %#v", ingress.Spec.DefaultBackend)
+	}
+	if len(ingress.Spec.Rules) != len(expectedHosts) {
+		t.Fatalf("expected %d host-specific maintenance rules, got %#v", len(expectedHosts), ingress.Spec.Rules)
+	}
+	for index, host := range expectedHosts {
+		rule := ingress.Spec.Rules[index]
+		if rule.Host != host || rule.HTTP == nil || len(rule.HTTP.Paths) != 1 {
+			t.Fatalf("expected one HTTP rule for host %q, got %#v", host, rule)
+		}
+		path := rule.HTTP.Paths[0]
+		if path.Path != "/*" || path.PathType == nil || *path.PathType != networkingv1.PathTypeImplementationSpecific {
+			t.Fatalf("expected /* ImplementationSpecific path, got %#v", path)
+		}
+		if path.Backend.Service == nil || path.Backend.Service.Name != maintenanceActionName || path.Backend.Service.Port.Name != maintenanceBackendPort {
+			t.Fatalf("unexpected maintenance backend: %#v", path.Backend)
+		}
 	}
 }
 

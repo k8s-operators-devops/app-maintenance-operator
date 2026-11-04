@@ -232,13 +232,17 @@ func (r *MaintenanceReconciler) enableMaintenance(
 	if err != nil {
 		return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", err.Error())
 	}
+	hosts, err := maintenanceRuleHosts(maintenance.Spec.Hosts)
+	if err != nil {
+		return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", err.Error())
+	}
 
 	if albGroupName != "" {
 		listenPorts, err := r.resolveGroupListenPorts(ctx, maintenance.Namespace, albGroupName)
 		if err != nil {
 			return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", err.Error())
 		}
-		if _, err := r.ensureGroupMaintenanceIngress(ctx, maintenance, albGroupName, listenPorts, actionJSON); err != nil {
+		if _, err := r.ensureGroupMaintenanceIngress(ctx, maintenance, albGroupName, listenPorts, hosts, actionJSON); err != nil {
 			return r.fail(ctx, maintenance, origStatus, "MaintenanceIngressReconcileFailed", "failed to reconcile maintenance ingress: "+err.Error(), err)
 		}
 
@@ -263,7 +267,7 @@ func (r *MaintenanceReconciler) enableMaintenance(
 	maintenance.Status.BackupCreated = true
 	maintenance.Status.TargetIngressResourceVersion = targetIngress.ResourceVersion
 
-	if _, err := r.ensureMaintenanceIngress(ctx, maintenance, &targetIngress, actionJSON); err != nil {
+	if _, err := r.ensureMaintenanceIngress(ctx, maintenance, &targetIngress, hosts, actionJSON); err != nil {
 		if isPermanentConfigurationError(err) {
 			return r.permanentFailure(ctx, maintenance, origStatus, "InvalidConfiguration", err.Error())
 		}
@@ -365,6 +369,7 @@ func (r *MaintenanceReconciler) ensureMaintenanceIngress(
 	ctx context.Context,
 	maintenance *k8smaintenancev1alpha1.Maintenance,
 	targetIngress *networkingv1.Ingress,
+	hosts []string,
 	actionJSON string,
 ) (*networkingv1.Ingress, error) {
 	if err := validateTargetIngress(targetIngress); err != nil {
@@ -376,7 +381,7 @@ func (r *MaintenanceReconciler) ensureMaintenanceIngress(
 			Name:      maintenanceIngressName(maintenance),
 			Namespace: maintenance.Namespace,
 		},
-		Spec: singleRuleMaintenanceSpec(targetIngress.Spec.IngressClassName),
+		Spec: singleRuleMaintenanceSpec(targetIngress.Spec.IngressClassName, hosts),
 	}
 	if err := ctrl.SetControllerReference(maintenance, desired, r.Scheme); err != nil {
 		return nil, err
@@ -442,6 +447,7 @@ func (r *MaintenanceReconciler) ensureGroupMaintenanceIngress(
 	maintenance *k8smaintenancev1alpha1.Maintenance,
 	albGroupName string,
 	listenPorts string,
+	hosts []string,
 	actionJSON string,
 ) (*networkingv1.Ingress, error) {
 	className := albIngressClass
@@ -458,7 +464,7 @@ func (r *MaintenanceReconciler) ensureGroupMaintenanceIngress(
 				albActionAnnotation:     actionJSON,
 			},
 		},
-		Spec: singleRuleMaintenanceSpec(&className),
+		Spec: singleRuleMaintenanceSpec(&className, hosts),
 	}
 	if strings.TrimSpace(listenPorts) != "" {
 		desired.Annotations["alb.ingress.kubernetes.io/listen-ports"] = listenPorts
@@ -669,11 +675,36 @@ func reconcileAnnotations(existing, desired map[string]string) map[string]string
 	return next
 }
 
-func singleRuleMaintenanceSpec(className *string) networkingv1.IngressSpec {
+func maintenanceRuleHosts(hosts []string) ([]string, error) {
+	if len(hosts) == 0 {
+		return nil, nil
+	}
+
+	seen := make(map[string]struct{}, len(hosts))
+	normalized := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		host = strings.TrimSpace(host)
+		if host == "" {
+			return nil, fmt.Errorf("hosts cannot contain an empty hostname")
+		}
+		if _, ok := seen[host]; ok {
+			continue
+		}
+		seen[host] = struct{}{}
+		normalized = append(normalized, host)
+	}
+	return normalized, nil
+}
+
+func singleRuleMaintenanceSpec(className *string, hosts []string) networkingv1.IngressSpec {
 	pathType := networkingv1.PathTypeImplementationSpecific
-	return networkingv1.IngressSpec{
-		IngressClassName: className,
-		Rules: []networkingv1.IngressRule{{
+	rules := make([]networkingv1.IngressRule, 0, max(1, len(hosts)))
+	if len(hosts) == 0 {
+		hosts = []string{""}
+	}
+	for _, host := range hosts {
+		rules = append(rules, networkingv1.IngressRule{
+			Host: host,
 			IngressRuleValue: networkingv1.IngressRuleValue{
 				HTTP: &networkingv1.HTTPIngressRuleValue{
 					Paths: []networkingv1.HTTPIngressPath{{
@@ -683,7 +714,11 @@ func singleRuleMaintenanceSpec(className *string) networkingv1.IngressSpec {
 					}},
 				},
 			},
-		}},
+		})
+	}
+	return networkingv1.IngressSpec{
+		IngressClassName: className,
+		Rules:            rules,
 	}
 }
 

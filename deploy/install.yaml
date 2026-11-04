@@ -77,6 +77,18 @@ spec:
                   name to resolve listener ports for the generated maintenance Ingress.
                 minLength: 1
                 type: string
+              hosts:
+                description: |-
+                  Hosts limits maintenance to the specified hostnames in the selected ALB
+                  IngressGroup. When omitted, the generated maintenance Ingress uses one
+                  catch-all rule and applies to every host in the group.
+
+                  Wildcard hostnames supported by Kubernetes Ingress, such as
+                  *.example.com, are allowed.
+                items:
+                  type: string
+                maxItems: 50
+                type: array
               maintenanceMode:
                 description: |-
                   MaintenanceMode is the master switch for maintenance behavior.
