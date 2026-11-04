@@ -5,6 +5,9 @@ metadata:
   namespace: <application-namespace>
 spec:
   targetIngress: <target-ingress-name>
+  # Optional: limit maintenance to named hosts. Omit for the whole IngressGroup.
+  hosts:
+    - app.example.com
   maintenanceMode: true
   response:
     backend: fixed-response

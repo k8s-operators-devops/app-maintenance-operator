@@ -46,13 +46,28 @@ The operator uses this field to find the target Ingress and reuse its ALB metada
 
 Optional recommended targeting mode. Name of the ALB IngressGroup to place into maintenance.
 
-The operator creates a standalone maintenance Ingress with `alb.ingress.kubernetes.io/group.name` set to this value, `alb.ingress.kubernetes.io/group.order: "-1000"`, and a catch-all `/*` fixed-response rule. AWS Load Balancer Controller reconciles that generated Ingress into a higher-priority ALB listener rule. This avoids coupling maintenance behavior to one existing application Ingress and keeps redirect/application routing layouts out of the Maintenance API.
+The operator creates a standalone maintenance Ingress with `alb.ingress.kubernetes.io/group.name` set to this value and `alb.ingress.kubernetes.io/group.order: "-1000"`. It uses a catch-all `/*` fixed-response rule by default, or host-specific `/*` rules when `spec.hosts` is configured. AWS Load Balancer Controller reconciles that generated Ingress into higher-priority ALB listener rules. This avoids coupling maintenance behavior to one existing application Ingress and keeps redirect/application routing layouts out of the Maintenance API.
 
 > **Operational model:** The generated maintenance Ingress creates the maintenance listener rule. Existing application redirect rules, paths, and backend service rules stay owned by the application Ingress.
 
 For AWS Load Balancer Controller correctness, the operator discovers existing Ingresses in the same namespace with the requested group name and mirrors the group's listener-port surface onto the generated maintenance Ingress. This matters because ALB IngressGroup rules only affect the listener ports defined for that Ingress.
 
 Set exactly one of `spec.albGroupName` or `spec.targetIngress`.
+
+`spec.hosts`
+
+Optional list of hostnames to place into maintenance. When omitted, maintenance applies to every host in the selected ALB IngressGroup. When set, the generated maintenance Ingress has one host-specific `/*` rule for each listed hostname; other hosts continue to use their application routing.
+
+```yaml
+spec:
+  albGroupName: shared-apps
+  hosts:
+    - app.example.com
+    - api.example.com
+  maintenanceMode: true
+```
+
+Wildcard hostnames accepted by Kubernetes Ingress, such as `*.example.com`, are supported. Empty hostname entries are rejected and duplicate entries are ignored.
 
 `spec.maintenanceMode`
 

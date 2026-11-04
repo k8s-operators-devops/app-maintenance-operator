@@ -44,6 +44,16 @@ type MaintenanceSpec struct {
 	// +optional
 	ALBGroupName string `json:"albGroupName,omitempty"`
 
+	// Hosts limits maintenance to the specified hostnames in the selected ALB
+	// IngressGroup. When omitted, the generated maintenance Ingress uses one
+	// catch-all rule and applies to every host in the group.
+	//
+	// Wildcard hostnames supported by Kubernetes Ingress, such as
+	// *.example.com, are allowed.
+	// +kubebuilder:validation:MaxItems=50
+	// +optional
+	Hosts []string `json:"hosts,omitempty"`
+
 	// MaintenanceMode is the master switch for maintenance behavior.
 	// When false or omitted, maintenance is disabled and Schedule is ignored.
 	// When true, maintenance starts immediately unless Schedule narrows the

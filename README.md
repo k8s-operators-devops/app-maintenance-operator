@@ -108,7 +108,7 @@ Use the value in the `GROUP` column as `spec.albGroupName`.
 
 ### Prerequisites for `targetIngress`
 
-Use `spec.targetIngress` when you want to point at one existing ALB Ingress by name. The operator reads that Ingress for ALB metadata, discovers its group name and listener ports, and creates one separate high-priority catch-all maintenance Ingress for that ALB group.
+Use `spec.targetIngress` when you want to point at one existing ALB Ingress by name. The operator reads that Ingress for ALB metadata, discovers its group name and listener ports, and creates one separate high-priority maintenance Ingress for that ALB group. It is catch-all by default, or host-specific when `spec.hosts` is set.
 
 Required:
 
@@ -256,9 +256,25 @@ Create one `Maintenance` resource in the application namespace. Pick exactly one
 - `albGroupName`: target an existing AWS Load Balancer Controller IngressGroup by group name.
 - `targetIngress`: target one existing ALB Ingress by name; the operator reads its ALB group and listener metadata.
 
-Both modes create a separate maintenance Ingress with one high-priority catch-all `/*` rule. AWS Load Balancer Controller turns that generated Ingress into an ALB listener rule for the same IngressGroup. The original application Ingress is not modified.
+Both modes create a separate maintenance Ingress with high-priority `/*` rules. By default, the operator generates one catch-all rule for the complete IngressGroup. Set `spec.hosts` to generate rules for only named hosts. AWS Load Balancer Controller turns the generated Ingress into ALB listener rules for the same IngressGroup. The original application Ingress is not modified.
 
 > **Operational model:** The operator changes maintenance routing by creating a managed overlay Ingress. It does not rewrite existing application paths, redirect actions, or backend service rules.
+
+### Host-Specific Maintenance
+
+Yes, one `Maintenance` resource can configure multiple hosts. Add each hostname to `spec.hosts`; the operator generates one high-priority `/*` fixed-response rule per hostname, in the listed order. Other hosts in the same ALB IngressGroup continue using their normal application routes.
+
+```yaml
+spec:
+  albGroupName: <alb-ingress-group-name>
+  hosts:
+    - app.example.com
+    - api.example.com
+    - '*.preview.example.com'
+  maintenanceMode: true
+```
+
+When `spec.hosts` is omitted or empty, the operator creates one hostless catch-all `/*` rule that places the entire ALB IngressGroup into maintenance. Empty hostname entries are rejected and duplicate hostnames are ignored.
 
 ### Option A: ALB IngressGroup Name
 
@@ -280,6 +296,9 @@ metadata:
   namespace: <application-namespace>
 spec:
   albGroupName: <alb-ingress-group-name>
+  # Optional: limit maintenance to named hosts. Omit for the whole IngressGroup.
+  hosts:
+    - app.example.com
   maintenanceMode: true
   response:
     backend: fixed-response
