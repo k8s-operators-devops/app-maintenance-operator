@@ -41,6 +41,8 @@ const (
 	testActionJSON     = "action-json"
 	testDriftedValue   = "drifted"
 	testHTTPHTTPSPorts = `[{"HTTP":80},{"HTTPS":443}]`
+	testAppHost        = "app.example.com"
+	testAPIHost        = "api.example.com"
 )
 
 func TestBuildALBActionJSON(t *testing.T) {
@@ -285,7 +287,7 @@ func TestEnsureMaintenanceIngressUsesConfiguredHosts(t *testing.T) {
 	target := newTargetIngress(testTargetIngress, testNamespace)
 	maintenance := newMaintenance("maint", target.Name)
 	maintenance.UID = types.UID(testMaintenanceUID)
-	maintenance.Spec.Hosts = []string{"app.example.com", "api.example.com"}
+	maintenance.Spec.Hosts = []string{testAppHost, testAPIHost}
 	hosts, err := maintenanceRuleHosts(maintenance.Spec.Hosts)
 	if err != nil {
 		t.Fatalf("maintenanceRuleHosts returned error: %v", err)
@@ -304,7 +306,7 @@ func TestEnsureGroupMaintenanceIngressUsesConfiguredHosts(t *testing.T) {
 	scheme := testScheme(t)
 	maintenance := newGroupMaintenance("maint", testALBGroupName)
 	maintenance.UID = types.UID(testMaintenanceUID)
-	maintenance.Spec.Hosts = []string{"app.example.com", "api.example.com"}
+	maintenance.Spec.Hosts = []string{testAppHost, testAPIHost}
 	hosts, err := maintenanceRuleHosts(maintenance.Spec.Hosts)
 	if err != nil {
 		t.Fatalf("maintenanceRuleHosts returned error: %v", err)
@@ -326,8 +328,8 @@ func TestMaintenanceRuleHosts(t *testing.T) {
 		wantErr string
 	}{
 		{name: "no configured hosts"},
-		{name: "trims and de-duplicates", hosts: []string{" app.example.com ", "api.example.com", "app.example.com"}, want: []string{"app.example.com", "api.example.com"}},
-		{name: "empty host rejected", hosts: []string{"app.example.com", "  "}, wantErr: "hosts cannot contain an empty hostname"},
+		{name: "trims and de-duplicates", hosts: []string{" " + testAppHost + " ", testAPIHost, testAppHost}, want: []string{testAppHost, testAPIHost}},
+		{name: "empty host rejected", hosts: []string{testAppHost, "  "}, wantErr: "hosts cannot contain an empty hostname"},
 	}
 
 	for _, tt := range tests {
@@ -539,17 +541,17 @@ func TestSetMaintenanceStatusTransitionTime(t *testing.T) {
 	maintenance.Generation = 7
 
 	setMaintenanceStatus(maintenance, "Enabled", "Maintenance mode enabled", metav1.ConditionTrue, "MaintenanceEnabled")
-	first := maintenance.Status.LastTransitionTime
-	if first == nil {
+	if maintenance.Status.LastTransitionTime == nil {
 		t.Fatalf("expected transition time")
 	}
+	first := *maintenance.Status.LastTransitionTime
 	condition := metaFindReady(maintenance)
 	if condition == nil || condition.ObservedGeneration != 7 {
 		t.Fatalf("expected observed generation 7, got %#v", condition)
 	}
 
 	setMaintenanceStatus(maintenance, "Enabled", "Maintenance mode enabled", metav1.ConditionTrue, "MaintenanceEnabled")
-	if !maintenance.Status.LastTransitionTime.Equal(first) {
+	if !maintenance.Status.LastTransitionTime.Equal(&first) {
 		t.Fatalf("expected identical status not to change transition time")
 	}
 
