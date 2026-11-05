@@ -557,7 +557,7 @@ make verify
 make bundle
 ```
 
-Release images are published by GitHub Actions to GHCR when a `v*` tag is pushed, or manually through the image publish workflow. The publish workflow enforces the release gate before pushing any image: the release tag must point to the current protected `main` commit, and the `Tests`, `Lint`, and `Build` checks must be successful for that exact commit.
+Pushing a `v*` tag starts the GitHub Actions release pipeline. It verifies that the tag points to the current protected `main` commit with successful `Tests`, `Lint`, and `Build` checks, publishes the multi-architecture image to GHCR, then creates a GitHub Release with generated notes and the tagged `install.yaml` attached. The manual workflow dispatch is only for retrying publication of an existing validated tag; it does not create or move a release tag.
 
 Before cutting a release tag, update pinned release references in one shot:
 
@@ -565,13 +565,21 @@ Before cutting a release tag, update pinned release references in one shot:
 make bump-release VERSION=v1.2.2
 ```
 
-Review `CHANGELOG.md`, merge the release-prep commit through the protected `main` branch, wait for required checks to pass on `main`, then create the immutable tag from that validated commit.
+Review `CHANGELOG.md`, merge the release-prep commit through the protected `main` branch, wait for required checks to pass on `main`, then create and push the immutable annotated tag from that validated commit:
+
+```bash
+git tag -a v1.2.2 -m "v1.2.2"
+git push origin v1.2.2
+```
+
+No manual GitHub Release page is required. Monitor the `Publish Release` workflow until the image and release jobs succeed. See [Releasing](docs/releasing.md) for the complete maintainer runbook.
 
 Documentation:
 
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [Testing](docs/testing.md)
+- [Releasing](docs/releasing.md)
 - [Pain-relief blog draft](docs/blog/aws-load-balancer-controller-maintenance-page.md)
 - [GitOps examples](examples/gitops)
 - [Changelog](CHANGELOG.md)
