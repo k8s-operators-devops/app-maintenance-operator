@@ -1,4 +1,4 @@
-name: Publish Image
+name: Publish Release
 
 on:
   push:
@@ -24,6 +24,8 @@ jobs:
     name: Build and push
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Resolve version
         id: version
@@ -160,3 +162,40 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Clone the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.publish.outputs.version }}
+
+      - name: Create or verify GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub Release $VERSION already exists."
+            exit 0
+          fi
+
+          release_args=(--verify-tag --title "$VERSION" --generate-notes)
+          if [[ "$VERSION" == *-* ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            "${release_args[@]}" \
+            "deploy/install.yaml#install.yaml"

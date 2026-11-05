@@ -62,7 +62,7 @@ Confirm the generated maintenance Ingress:
 - exists separately from the application Ingress;
 - has `alb.ingress.kubernetes.io/group.order: "-1000"`;
 - has `alb.ingress.kubernetes.io/group.name: <alb-ingress-group-name>`;
-- has one catch-all `/*` path that uses `maintenance/use-annotation`.
+- has one catch-all `/*` path that uses `maintenance/use-annotation` when `spec.hosts` is omitted, or one host-specific `/*` path per configured host.
 
 Confirm at least one application Ingress declares the ALB IngressGroup:
 
