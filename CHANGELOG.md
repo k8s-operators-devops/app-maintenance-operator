@@ -8,6 +8,18 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 No unreleased changes.
 
+## [v1.3.0] - 2026-11-04
+
+### Added
+
+- Added optional `spec.hosts` support for host-specific maintenance overlays. One `/*` fixed-response rule is generated for each configured host, while omitted hosts retain the existing group-wide catch-all behavior.
+- Added tag-driven GitHub Release automation. Successful release publication now attaches the release-specific `install.yaml` and generated release notes after the multi-architecture image is published to GHCR.
+
+### Changed
+
+- Updated pinned install manifests, image references, GitOps examples, release documentation, and configuration references for `v1.3.0`.
+- Added maintainer release documentation covering release preparation, validated tagging, retries, and pre-release behavior.
+
 ## [v1.2.2] - 2026-08-15
 
 ### Changed
