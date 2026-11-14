@@ -71,7 +71,9 @@ jobs:
           fi
 
           export TAG_COMMIT="${tag_commit}"
-          python - <<'PY'
+          deadline=$((SECONDS + 900))
+          while true; do
+            if python - <<'PY'
           import json
           import os
           import sys
@@ -100,7 +102,7 @@ jobs:
               sys.exit(1)
 
           runs = payload.get("check_runs", [])
-          missing = []
+          pending = []
           for check_name in required:
               successful_runs = [
                   run for run in runs
@@ -108,24 +110,48 @@ jobs:
                   and run.get("status") == "completed"
                   and run.get("conclusion") == "success"
               ]
-              if not successful_runs:
-                  observed = [
-                      f"{run.get('status')}/{run.get('conclusion')}"
-                      for run in runs
-                      if run.get("name") == check_name
-                  ]
-                  detail = ", ".join(observed) if observed else "not found"
-                  missing.append(f"{check_name} ({detail})")
+              if successful_runs:
+                  continue
 
-          if missing:
+              observed = [
+                  f"{run.get('status')}/{run.get('conclusion')}"
+                  for run in runs
+                  if run.get("name") == check_name
+              ]
+              if any(run.get("status") == "completed" for run in runs if run.get("name") == check_name):
+                  print(
+                      "::error::Release blocked. Required check did not succeed on "
+                      f"{sha}: {check_name} ({', '.join(observed)})"
+                  )
+                  sys.exit(1)
+              detail = ", ".join(observed) if observed else "not found"
+              pending.append(f"{check_name} ({detail})")
+
+          if pending:
               print(
-                  "::error::Release blocked. Required checks are not successful on "
-                  f"{sha}: {', '.join(missing)}"
+                  "Required checks are still pending on "
+                  f"{sha}: {', '.join(pending)}"
               )
-              sys.exit(1)
+              sys.exit(2)
 
           print(f"Release gate passed for {sha}: {', '.join(required)}")
           PY
+            then
+              break
+            else
+              status=$?
+            fi
+
+            if [ "${status}" -ne 2 ]; then
+              exit "${status}"
+            fi
+            if [ "${SECONDS}" -ge "${deadline}" ]; then
+              echo "::error::Timed out waiting for required checks on ${tag_commit}."
+              exit 1
+            fi
+
+            sleep 15
+          done
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
