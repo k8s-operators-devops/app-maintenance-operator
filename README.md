@@ -140,13 +140,7 @@ Choose the install mode that matches your operating model:
 
 ### Global Scoped Install
 
-Use the latest stable manifest when one operator should reconcile maintenance across namespaces:
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/latest/deploy/install.yaml
-```
-
-For production change control, pin the immutable release tag:
+Use the current stable release manifest when one operator should reconcile maintenance across namespaces:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.3.1/deploy/install.yaml
@@ -486,18 +480,12 @@ The generated maintenance Ingress should be removed. Normal application routing 
 
 Delete `Maintenance` resources before removing the operator. This gives the controller a chance to run its finalizer cleanup, delete generated maintenance Ingresses, and remove backup ConfigMaps while the operator is still running.
 
-For a global scoped install, delete the same manifest ref you installed. If you used the latest stable ref:
+For a global scoped install, delete the same manifest ref you installed. For `v1.3.1`:
 
 ```bash
 kubectl get maintenance -A
 kubectl delete maintenance --all -A
 kubectl get maintenance -A
-kubectl delete -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/latest/deploy/install.yaml
-```
-
-If you pinned the v1.2.2 release:
-
-```bash
 kubectl delete -f https://raw.githubusercontent.com/k8s-operators-devops/app-maintenance-operator/v1.3.1/deploy/install.yaml
 ```
 
@@ -573,8 +561,8 @@ make bump-release VERSION=v1.3.1
 Review `CHANGELOG.md`, merge the release-prep commit through the protected `main` branch, wait for required checks to pass on `main`, then create and push the immutable annotated tag from that validated commit:
 
 ```bash
-git tag -a v1.2.2 -m "v1.2.2"
-git push origin v1.2.2
+git tag -a v1.3.1 -m "v1.3.1"
+git push origin v1.3.1
 ```
 
 No manual GitHub Release page is required. Monitor the `Publish Release` workflow until the image and release jobs succeed. See [Releasing](docs/releasing.md) for the complete maintainer runbook.
