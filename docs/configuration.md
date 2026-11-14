@@ -56,7 +56,7 @@ Set exactly one of `spec.albGroupName` or `spec.targetIngress`.
 
 `spec.hosts`
 
-Optional list of hostnames to place into maintenance. When omitted, maintenance applies to every host in the selected ALB IngressGroup. When set, the generated maintenance Ingress has one host-specific `/*` rule for each listed hostname; other hosts continue to use their application routing.
+Optional list of hostnames to place into maintenance, supported by operator version `v1.3.0` and later. When omitted, maintenance applies to every host in the selected ALB IngressGroup. When set, the generated maintenance Ingress has one host-specific `/*` rule for each listed hostname; other hosts continue to use their application routing.
 
 ```yaml
 spec:
@@ -181,6 +181,10 @@ Example:
 ```yaml
 spec:
   targetIngress: <target-ingress-name>
+  # Optional since v1.3.0. Omit hosts for the complete IngressGroup.
+  hosts:
+    - app.example.com
+    - api.example.com
   maintenanceMode: true
 ```
 

@@ -262,7 +262,7 @@ Both modes create a separate maintenance Ingress with high-priority `/*` rules. 
 
 ### Host-Specific Maintenance
 
-Yes, one `Maintenance` resource can configure multiple hosts. Add each hostname to `spec.hosts`; the operator generates one high-priority `/*` fixed-response rule per hostname, in the listed order. Other hosts in the same ALB IngressGroup continue using their normal application routes.
+Host-specific maintenance is supported by operator version `v1.3.0` and later. One `Maintenance` resource can configure multiple hosts: add each hostname to `spec.hosts`, and the operator generates one high-priority `/*` fixed-response rule per hostname, in the listed order. Other hosts in the same ALB IngressGroup continue using their normal application routes.
 
 ```yaml
 spec:
@@ -358,6 +358,11 @@ metadata:
   namespace: <application-namespace>
 spec:
   targetIngress: <target-ingress-name>
+  # Optional since v1.3.0: limit maintenance to named hosts.
+  # Omit hosts for maintenance across the whole discovered IngressGroup.
+  hosts:
+    - app.example.com
+    - api.example.com
   maintenanceMode: true
   response:
     backend: fixed-response
