@@ -8,6 +8,17 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 No unreleased changes.
 
+## [v1.3.1] - 2026-11-13
+
+### Changed
+
+- Updated the Kubernetes client dependencies to v0.37.0, Ginkgo/Gomega test dependencies, gRPC, and OpenTelemetry to their reviewed releases.
+- Updated pinned GitHub Actions used by CI, CodeQL, and the release publishing workflow.
+
+### Fixed
+
+- Consolidated reviewed Dependabot updates into one validated maintenance release.
+
 ## [v1.3.0] - 2026-11-04
 
 ### Added
