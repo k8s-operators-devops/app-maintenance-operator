@@ -16,6 +16,7 @@ $updates = @(
         Path = "README.md"
         Patterns = @(
             @{ From = 'app-maintenance-operator/v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?/deploy/install\.yaml'; To = "app-maintenance-operator/$Version/deploy/install.yaml" },
+            @{ From = 'app-maintenance-operator/latest/deploy/install\.yaml'; To = "app-maintenance-operator/$Version/deploy/install.yaml" },
             @{ From = 'ref=v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "ref=$Version" },
             @{ From = 'make bump-release VERSION=v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "make bump-release VERSION=$Version" },
             @{ From = [regex]::Escape($image) + ':v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "$image`:$Version" }
@@ -24,7 +25,11 @@ $updates = @(
     @{
         Path = "docs/index.html"
         Patterns = @(
-            @{ From = 'app-maintenance-operator/v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?/deploy/install\.yaml'; To = "app-maintenance-operator/$Version/deploy/install.yaml" }
+            @{ From = 'app-maintenance-operator/v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?/deploy/install\.yaml'; To = "app-maintenance-operator/$Version/deploy/install.yaml" },
+            @{ From = 'app-maintenance-operator/latest/deploy/install\.yaml'; To = "app-maintenance-operator/$Version/deploy/install.yaml" },
+            @{ From = '<h2>Install v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?</h2>'; To = "<h2>Install $Version</h2>" },
+            @{ From = 'Copy v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)? install command'; To = "Copy $Version install command" },
+            @{ From = '<span>v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?</span>'; To = "<span>$Version</span>" }
         )
     },
     @{
