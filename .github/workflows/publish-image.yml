@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag to publish. Must point to the current protected main commit, for example v1.3.1"
+        description: "Release tag to publish. Must point to the current protected main commit, for example v1.3.2"
         required: true
-        default: "v1.3.1"
+        default: "v1.3.2"
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
   publish:
     name: Build and push
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -53,7 +53,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REQUIRED_CHECKS: Tests,Lint,Build
+          REQUIRED_CHECKS: Tests,Lint,Build,E2E Tests,CodeQL
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
@@ -71,7 +71,7 @@ jobs:
           fi
 
           export TAG_COMMIT="${tag_commit}"
-          deadline=$((SECONDS + 900))
+          deadline=$((SECONDS + 2700))
           while true; do
             if python - <<'PY'
           import json

@@ -19,6 +19,9 @@ $updates = @(
             @{ From = 'app-maintenance-operator/latest/deploy/install\.yaml'; To = "app-maintenance-operator/$Version/deploy/install.yaml" },
             @{ From = 'ref=v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "ref=$Version" },
             @{ From = 'make bump-release VERSION=v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "make bump-release VERSION=$Version" },
+            @{ From = 'For `v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?`:'; To = "For ``$Version``:" },
+            @{ From = 'git tag -a v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)? -m "v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?"'; To = "git tag -a $Version -m `"$Version`"" },
+            @{ From = 'git push origin v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "git push origin $Version" },
             @{ From = [regex]::Escape($image) + ':v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "$image`:$Version" }
         )
     },
@@ -36,6 +39,12 @@ $updates = @(
         Path = "docs/configuration.md"
         Patterns = @(
             @{ From = 'ref=v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = "ref=$Version" }
+        )
+    },
+    @{
+        Path = "docs/releasing.md"
+        Patterns = @(
+            @{ From = 'v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?'; To = $Version }
         )
     },
     @{

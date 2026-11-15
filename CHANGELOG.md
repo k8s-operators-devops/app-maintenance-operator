@@ -6,7 +6,19 @@ The format follows Keep a Changelog, and this project uses semantic versioning.
 
 ## [Unreleased]
 
-No unreleased changes.
+## [v1.3.2] - 2026-11-14
+
+### Changed
+
+- Updated OpenTelemetry, gRPC, and related Go module dependencies through the reviewed Dependabot consolidation.
+- Pinned public installation, GitOps, documentation, and generated manifest references to `v1.3.2`.
+- Clarified host-specific maintenance examples, multi-host behavior, and the group-wide behavior when `spec.hosts` is omitted.
+- Made the release gate wait for successful unit tests, lint, build, end-to-end tests, and CodeQL analysis.
+
+### Security
+
+- Added a responsible disclosure policy for reporting security vulnerabilities privately.
+- Upgraded the OpenTelemetry trace gRPC exporter to v1.45.0 to remediate GHSA-8wmf-6v46-5gfg.
 
 ## [v1.3.1] - 2026-11-13
 
