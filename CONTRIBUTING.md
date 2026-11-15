@@ -2,6 +2,8 @@
 
 Thanks for considering a contribution. This project is intentionally small and practical: the best contributions reduce operational risk for teams using AWS Load Balancer Controller.
 
+For suspected security vulnerabilities, follow the private reporting process in [SECURITY.md](SECURITY.md) instead of opening a public issue.
+
 ## Good First Contributions
 
 - Improve examples for real AWS ALB Ingress patterns.
